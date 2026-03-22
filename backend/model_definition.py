@@ -3,69 +3,38 @@ import torch.nn as nn
 
 
 class RespiSoundCRNN(nn.Module):
-    def __init__(self, num_classes=5, n_mels=128):
-        super(RespiSoundCRNN, self).__init__()
+    """
+    CRNN trained in Colab: 2× Conv-BN-ReLU-MaxPool, dropout, 1-layer LSTM, linear head.
+    Input: (batch, 1, 128, time) log-mel as produced by extract_features() in main.py.
+    Output logits order matches CLASSES in main.py (LabelEncoder order).
+    """
 
+    def __init__(self, num_classes: int = 5):
+        super().__init__()
         self.cnn = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=(3, 3), padding=1),
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),
             nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.MaxPool2d((2, 2)),
-            nn.Dropout2d(0.2),
-
-            nn.Conv2d(32, 64, kernel_size=(3, 3), padding=1),
+            nn.MaxPool2d(2),
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.MaxPool2d((2, 2)),
-            nn.Dropout2d(0.2),
-
-            nn.Conv2d(64, 128, kernel_size=(3, 3), padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 2)),
-            nn.Dropout2d(0.3),
-
-            nn.Conv2d(128, 256, kernel_size=(3, 3), padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
-            nn.AdaptiveAvgPool2d((4, None)),
-            nn.Dropout2d(0.3),
+            nn.MaxPool2d(2),
         )
-
-        self.rnn = nn.GRU(
-            input_size=256 * 4,
+        self.dropout = nn.Dropout(0.3)
+        self.rnn = nn.LSTM(
+            input_size=64 * 32,
             hidden_size=128,
-            num_layers=2,
+            num_layers=1,
             batch_first=True,
-            bidirectional=True,
-            dropout=0.3
         )
+        self.fc = nn.Linear(128, num_classes)
 
-        self.attention = nn.Sequential(
-            nn.Linear(256, 128),
-            nn.Tanh(),
-            nn.Linear(128, 1)
-        )
-
-        self.classifier = nn.Sequential(
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(128, num_classes)
-        )
-
-    def forward(self, x):
-        cnn_out = self.cnn(x)
-
-        batch, channels, freq, time = cnn_out.shape
-        cnn_out = cnn_out.permute(0, 3, 1, 2)
-        cnn_out = cnn_out.reshape(batch, time, channels * freq)
-
-        rnn_out, _ = self.rnn(cnn_out)
-
-        attn_weights = self.attention(rnn_out)
-        attn_weights = torch.softmax(attn_weights, dim=1)
-        context = (rnn_out * attn_weights).sum(dim=1)
-
-        output = self.classifier(context)
-        return output
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.cnn(x)
+        b, c, f, t = x.size()
+        x = x.permute(0, 3, 1, 2).contiguous().view(b, t, c * f)
+        x = self.dropout(x)
+        x, _ = self.rnn(x)
+        x = x[:, -1, :]
+        return self.fc(x)

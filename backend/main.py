@@ -30,7 +30,12 @@ MODEL_PATH = BASE_DIR / "model" / "respisound_model.pt"
 
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
-CLASSES = ["Asthma", "COPD", "Pneumonia", "Bronchitis", "Healthy"]
+# Must match training LabelEncoder order: asthma, bronchitis, copd, healthy, pneumonia
+CLASSES = ["Asthma", "Bronchitis", "COPD", "Healthy", "Pneumonia"]
+
+TARGET_SAMPLE_RATE = 16_000
+TARGET_DURATION_S = 1.5
+TARGET_NUM_SAMPLES = int(TARGET_SAMPLE_RATE * TARGET_DURATION_S)
 
 model = None
 feature_extractor = None
@@ -75,16 +80,21 @@ def load_model():
     global model, feature_extractor
     try:
         import torch
-        import torchaudio
 
         if not MODEL_PATH.exists():
             logger.warning("Model file not found at %s — running in demo mode", MODEL_PATH)
             return False
 
         from model_definition import RespiSoundCRNN
-        checkpoint = torch.load(str(MODEL_PATH), map_location="cpu")
+
+        raw = torch.load(str(MODEL_PATH), map_location="cpu")
+        state = (
+            raw["model_state_dict"]
+            if isinstance(raw, dict) and "model_state_dict" in raw
+            else raw
+        )
         model = RespiSoundCRNN(num_classes=len(CLASSES))
-        model.load_state_dict(checkpoint["model_state_dict"])
+        model.load_state_dict(state, strict=True)
         model.eval()
         logger.info("Model loaded successfully")
         return True
@@ -94,43 +104,37 @@ def load_model():
 
 
 def extract_features(audio_path: str):
+    """
+    Matches training notebook: librosa 16 kHz, 1.5 s pad/trim, mel (n_fft=2048, hop=512,
+    n_mels=128), power_to_db(ref=max), per-spectrogram z-score (eps 1e-6).
+    """
     try:
+        import librosa
         import torch
-        import torchaudio
-        import torchaudio.transforms as T
 
-        waveform, sample_rate = torchaudio.load(audio_path)
+        y, _ = librosa.load(audio_path, sr=TARGET_SAMPLE_RATE, mono=True)
+        y = np.asarray(y, dtype=np.float32)
 
-        if waveform.shape[0] > 1:
-            waveform = waveform.mean(dim=0, keepdim=True)
+        if y.size == 0:
+            raise ValueError("Empty audio after load")
 
-        if sample_rate != 16000:
-            resampler = T.Resample(orig_freq=sample_rate, new_freq=16000)
-            waveform = resampler(waveform)
-
-        target_length = 16000 * 5
-        if waveform.shape[1] < target_length:
-            padding = target_length - waveform.shape[1]
-            waveform = torch.nn.functional.pad(waveform, (0, padding))
+        if y.shape[0] < TARGET_NUM_SAMPLES:
+            y = np.pad(y, (0, TARGET_NUM_SAMPLES - y.shape[0]))
         else:
-            waveform = waveform[:, :target_length]
+            y = y[:TARGET_NUM_SAMPLES]
 
-        mel_transform = T.MelSpectrogram(
-            sample_rate=16000,
-            n_fft=1024,
+        mel = librosa.feature.melspectrogram(
+            y=y,
+            sr=TARGET_SAMPLE_RATE,
+            n_fft=2048,
             hop_length=512,
             n_mels=128,
-            f_min=50,
-            f_max=8000
         )
-        amplitude_to_db = T.AmplitudeToDB(top_db=80)
+        log_mel = librosa.power_to_db(mel, ref=np.max)
+        log_mel = (log_mel - np.mean(log_mel)) / (np.std(log_mel) + 1e-6)
 
-        mel_spec = mel_transform(waveform)
-        mel_spec_db = amplitude_to_db(mel_spec)
-
-        mel_spec_db = (mel_spec_db - mel_spec_db.mean()) / (mel_spec_db.std() + 1e-8)
-
-        return mel_spec_db.unsqueeze(0)
+        tensor = torch.from_numpy(log_mel.astype(np.float32)).unsqueeze(0).unsqueeze(0)
+        return tensor
 
     except Exception as e:
         logger.error("Feature extraction failed: %s", str(e))

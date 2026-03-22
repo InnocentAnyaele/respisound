@@ -24,7 +24,7 @@ function formatDate(iso: string) {
   });
 }
 
-const CLASSES = ["All", "Asthma", "COPD", "Pneumonia", "Bronchitis", "Healthy"];
+const CLASSES = ["All", "Asthma", "Bronchitis", "COPD", "Healthy", "Pneumonia"];
 
 export default function HistoryPage() {
   const [screenings, setScreenings] = useState<Screening[]>([]);

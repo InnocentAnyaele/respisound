@@ -1,6 +1,6 @@
 # RespiSound — Desktop Clinical Screening Platform
 
-A respiratory disease screening tool that analyses cough audio samples and classifies them into five categories: Asthma, COPD, Pneumonia, Bronchitis, and Healthy. Built as a standalone desktop application for clinical use in low-resource settings where internet access cannot be guaranteed.
+A respiratory disease screening tool that analyses cough audio samples and classifies them into five categories: Asthma, Bronchitis, COPD, Healthy, and Pneumonia (model output order). Built as a standalone desktop application for clinical use in low-resource settings where internet access cannot be guaranteed.
 
 ---
 
