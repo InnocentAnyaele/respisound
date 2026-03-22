@@ -1,18 +1,20 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+use std::net::TcpListener;
 use std::process::{Child, Command};
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
+use tauri::{AppHandle, Manager, RunEvent};
 
 struct ApiProcess(Mutex<Option<Child>>);
 
 fn find_free_port() -> u16 {
-    use std::net::TcpListener;
     let listener = TcpListener::bind("127.0.0.1:0").expect("failed to bind random port");
     listener.local_addr().unwrap().port()
 }
 
 fn get_sidecar_path(app: &AppHandle) -> std::path::PathBuf {
     let resource_dir = app
-        .path_resolver()
+        .path()
         .resource_dir()
         .expect("failed to get resource dir");
 
@@ -48,7 +50,7 @@ fn wait_for_api(port: u16, max_tries: u32) -> bool {
 }
 
 #[tauri::command]
-fn get_api_port(state: tauri::State<ApiPortState>) -> u16 {
+fn get_api_port(state: tauri::State<'_, ApiPortState>) -> u16 {
     *state.0.lock().unwrap()
 }
 
@@ -61,7 +63,8 @@ fn main() {
         .manage(ApiProcess(Mutex::new(None)))
         .manage(ApiPortState(Mutex::new(port)))
         .setup(move |app| {
-            let sidecar_path = get_sidecar_path(app.handle());
+            let handle = app.handle().clone();
+            let sidecar_path = get_sidecar_path(&handle);
             let child = Command::new(&sidecar_path)
                 .env("RESPISOUND_PORT", port.to_string())
                 .spawn()
@@ -69,18 +72,15 @@ fn main() {
 
             *app.state::<ApiProcess>().0.lock().unwrap() = Some(child);
 
-            let app_handle = app.handle().clone();
             std::thread::spawn(move || {
                 let ready = wait_for_api(port, 30);
                 if ready {
-                    if let Some(window) = app_handle.get_window("main") {
+                    if let Some(window) = handle.get_webview_window("main") {
                         let url = format!("http://127.0.0.1:{}", port);
-                        window
-                            .eval(&format!(
-                                "window.__RESPISOUND_API_URL__ = '{}'; window.location.reload();",
-                                url
-                            ))
-                            .ok();
+                        let _ = window.eval(&format!(
+                            "window.__RESPISOUND_API_URL__ = '{}'; window.location.reload();",
+                            url
+                        ));
                     }
                 }
             });
@@ -90,16 +90,11 @@ fn main() {
         .invoke_handler(tauri::generate_handler![get_api_port])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| match event {
-            RunEvent::WindowEvent {
-                event: WindowEvent::CloseRequested { .. },
-                ..
-            }
-            | RunEvent::ExitRequested { .. } => {
+        .run(|app, event| {
+            if matches!(event, RunEvent::Exit) {
                 if let Some(mut child) = app.state::<ApiProcess>().0.lock().unwrap().take() {
                     child.kill().ok();
                 }
             }
-            _ => {}
         });
 }

@@ -1,69 +1,45 @@
 {
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "RespiSound",
+  "version": "1.0.0",
+  "identifier": "com.respisound.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
-    "devPath": "http://localhost:3000",
-    "distDir": "../frontend/out"
+    "devUrl": "http://localhost:3000",
+    "frontendDist": "../../frontend/out"
   },
-  "package": {
-    "productName": "RespiSound",
-    "version": "1.0.0"
-  },
-  "tauri": {
-    "allowlist": {
-      "all": false,
-      "shell": {
-        "all": false,
-        "open": true
-      },
-      "window": {
-        "all": false,
-        "close": true,
-        "minimize": true,
-        "maximize": true,
-        "unminimize": true,
-        "unmaximize": true,
-        "startDragging": true
-      }
-    },
-    "bundle": {
-      "active": true,
-      "targets": "all",
-      "identifier": "com.respisound.app",
-      "icon": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/icon.icns",
-        "icons/icon.ico"
-      ],
-      "resources": [
-        "sidecar/**"
-      ],
-      "externalBin": [],
-      "copyright": "",
-      "category": "Healthcare",
-      "shortDescription": "Respiratory disease screening via cough sound analysis",
-      "longDescription": "RespiSound is a clinical decision support tool that classifies respiratory diseases from cough audio samples using deep learning."
-    },
-    "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' http://127.0.0.1:*"
-    },
-    "updater": {
-      "active": false
-    },
+  "app": {
     "windows": [
       {
-        "fullscreen": false,
-        "resizable": true,
+        "label": "main",
         "title": "RespiSound",
         "width": 1200,
         "height": 780,
         "minWidth": 960,
         "minHeight": 640,
-        "decorations": true,
-        "transparent": false
+        "resizable": true,
+        "decorations": true
       }
-    ]
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' http://127.0.0.1:* ipc: http://ipc.localhost https://ipc.tauri.app"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": ["sidecar/"],
+    "copyright": "",
+    "category": "Healthcare and Fitness",
+    "shortDescription": "Respiratory disease screening via cough sound analysis",
+    "longDescription": "RespiSound is a clinical decision support tool that classifies respiratory diseases from cough audio samples using deep learning."
   }
 }

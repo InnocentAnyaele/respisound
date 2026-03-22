@@ -23,7 +23,12 @@ uploads/
 backend/dist/
 backend/build/
 tauri-app/src-tauri/target/
-tauri-app/src-tauri/sidecar/
+# Keep sidecar/ for Tauri bundle glob; ignore PyInstaller output only
+tauri-app/src-tauri/sidecar/respisound-api/
+
+# Mobile icon outputs from `tauri icon` (desktop-only app)
+tauri-app/src-tauri/icons/android/
+tauri-app/src-tauri/icons/ios/
 
 .env
 .env.local

@@ -55,11 +55,42 @@ Data is persisted locally in `respisound.db` (SQLite), stored alongside the exec
 | Python | 3.10+ | Backend + PyInstaller |
 | Node.js | 18+ | Frontend build |
 | Rust | 1.70+ | Tauri compilation |
-| Tauri CLI | 1.6 | Desktop bundling |
+| Tauri CLI | **2.x** | Desktop bundling (v2 required for **Ubuntu 24.04** — v1 needs WebKit/JavaScriptCore **4.0**, which Noble no longer ships) |
+| **Rust (cargo)** | **1.70+** | **Required for `npm run tauri:build`** — if you see `failed to get cargo metadata: No such file or directory`, install Rust and put `cargo` on your `PATH` |
 
-Install Tauri CLI:
+Install Rust (required before Tauri build):
+
 ```bash
-npm install -g @tauri-apps/cli@1.6
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# Then reload your shell, or:
+source "$HOME/.cargo/env"
+cargo --version
+```
+
+On **Linux**, install [Tauri **v2** system dependencies](https://v2.tauri.app/start/prerequisites/#linux). This project uses **Tauri 2** so it builds on **Ubuntu 24.04** (WebKitGTK **4.1** / JavaScriptCore **4.1**). Older **Tauri 1** on Noble often fails with *`javascriptcoregtk-4.0` was not found* because that `.pc` file is not in Ubuntu’s archives anymore.
+
+**Ubuntu 24.04 (Noble)** — WebKit **4.1**:
+
+```bash
+sudo apt update
+sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
+  build-essential pkg-config curl wget file libssl-dev libxdo-dev
+```
+
+**Ubuntu 22.04 (Jammy)** — WebKit **4.0** (use this package name on Jammy):
+
+```bash
+sudo apt update
+sudo apt install -y libwebkit2gtk-4.0-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
+  build-essential pkg-config curl wget file libssl-dev libxdo-dev
+```
+
+If `sudo apt update` fails because of **broken extra repos** (404 / “Payment Required” / unsigned), fix or remove those entries under `/etc/apt/sources.list.d/`, then run `sudo apt update` again.
+
+Optional global CLI (the repo also uses the local CLI from `tauri-app/node_modules`):
+
+```bash
+npm install -g @tauri-apps/cli@^2
 ```
 
 Install Rust: https://rustup.rs
@@ -128,13 +159,26 @@ This runs PyInstaller and copies the output into `tauri-app/src-tauri/sidecar/re
 
 ### Step 2 — Build the Tauri desktop app
 
+Ensure `cargo` works in the same terminal (`cargo --version`, or `./scripts/check_rust.sh`). Conda does not include Rust; use `rustup` as above.
+
 ```bash
 cd tauri-app
 npm install
 npm run tauri:build
 ```
 
-Tauri compiles the Rust core, bundles the static frontend, embeds the sidecar, and produces an installer in `tauri-app/src-tauri/target/release/bundle/`.
+`beforeBuildCommand` runs `npm run build` here, which installs frontend deps if needed and runs **`next build`** in `../frontend` (static export → `frontend/out`). In `tauri.conf.json`, **`distDir` is relative to `src-tauri/`**, so it must be `../../frontend/out` (not `../frontend/out`), or Tauri will report missing web assets.
+
+### What one installer contains
+
+You get **one** desktop artifact (e.g. `.AppImage` or `.deb`) that runs **both**:
+
+1. **Frontend** — the Next.js **static export** (`frontend/out`) is **embedded** in the app; the Tauri window is a webview that loads that UI (no separate `npm run dev` for end users).
+2. **Backend** — the PyInstaller **`respisound-api`** binary is bundled under `sidecar/` (see `bundle.resources` in `tauri.conf.json`). Rust **spawns it** on startup and your UI talks to `http://127.0.0.1:<port>`.
+
+So the “final file” is not backend-only: it is **Rust shell + baked-in static UI + Python API sidecar**.
+
+Tauri compiles the Rust core, copies those assets, and produces installers under `tauri-app/src-tauri/target/release/bundle/`.
 
 Output files by platform:
 - **Windows** → `respisound_1.0.0_x64.msi` or `respisound_1.0.0_x64-setup.exe`

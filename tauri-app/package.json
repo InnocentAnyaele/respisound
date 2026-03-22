@@ -3,14 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "dev": "npm run dev --prefix ../frontend",
+    "build": "npm install --prefix ../frontend && npm run build --prefix ../frontend",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "1.6.0"
-  },
-  "dependencies": {
-    "@tauri-apps/api": "1.6.0"
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/cli": "^2.10.1"
   }
 }

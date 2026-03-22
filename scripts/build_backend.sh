@@ -26,4 +26,4 @@ npm install --silent
 
 echo ""
 echo "=== Backend build complete ==="
-echo "Run 'npm run tauri build' inside tauri-app/ to produce the final installer."
+echo "Run 'npm run tauri:build' inside tauri-app/ to produce the final installer."
