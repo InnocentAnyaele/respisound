@@ -1,4 +1,4 @@
-function getBase(): string {
+export function getBase(): string {
   if (typeof window !== "undefined") {
     const stored = window.sessionStorage.getItem("__RESPISOUND_API_URL__");
     if (stored) return stored;

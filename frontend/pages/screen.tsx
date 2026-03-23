@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from "react";
 import Layout from "../components/Layout";
 import {
   api,
+  getBase,
   Screening,
   Patient,
   ExplainResponse,
@@ -634,14 +635,16 @@ function SpectralMetricsCard({
 // ─── VisualAnalysisPanel ──────────────────────────────────────────────────────
 
 function VisualAnalysisPanel({
-  melB64,
-  gradcamB64,
+  screeningId,
   demoMode,
 }: {
-  melB64: string;
-  gradcamB64: string;
+  screeningId: string;
   demoMode: boolean;
 }) {
+  const base = getBase();
+  const melSrc = `${base}/explain/${screeningId}/mel.png`;
+  const gradcamSrc = `${base}/explain/${screeningId}/gradcam.png`;
+
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
       {/* Mel Spectrogram */}
@@ -658,33 +661,16 @@ function VisualAnalysisPanel({
           Log-power energy across 128 mel-scaled frequency bands over 1.5 s. Brighter
           (magma) regions indicate higher energy concentration.
         </p>
-        {melB64 ? (
-          <img
-            src={`data:image/png;base64,${melB64}`}
-            alt="Mel spectrogram"
-            style={{
-              width: "100%",
-              borderRadius: 8,
-              border: "1px solid var(--border)",
-              display: "block",
-            }}
-          />
-        ) : (
-          <div
-            style={{
-              height: 100,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              border: "1px solid var(--border)",
-              borderRadius: 8,
-              fontSize: 12,
-              color: "var(--text-tertiary)",
-            }}
-          >
-            Spectrogram unavailable
-          </div>
-        )}
+        <img
+          src={melSrc}
+          alt="Mel spectrogram"
+          style={{
+            width: "100%",
+            borderRadius: 8,
+            border: "1px solid var(--border)",
+            display: "block",
+          }}
+        />
         <div
           style={{
             display: "flex",
@@ -714,18 +700,7 @@ function VisualAnalysisPanel({
           Gradient-weighted class activation map overlaid on the spectrogram. Red/warm
           regions were most influential in driving the model's classification decision.
         </p>
-        {gradcamB64 ? (
-          <img
-            src={`data:image/png;base64,${gradcamB64}`}
-            alt="GradCAM heatmap"
-            style={{
-              width: "100%",
-              borderRadius: 8,
-              border: "1px solid var(--border)",
-              display: "block",
-            }}
-          />
-        ) : (
+        {demoMode ? (
           <div
             style={{
               height: 100,
@@ -754,10 +729,21 @@ function VisualAnalysisPanel({
               <line x1="12" y1="8" x2="12" y2="12" />
               <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
-            {demoMode ? "GradCAM requires a loaded model" : "GradCAM computation failed"}
+            GradCAM requires a loaded model
           </div>
+        ) : (
+          <img
+            src={gradcamSrc}
+            alt="GradCAM heatmap"
+            style={{
+              width: "100%",
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              display: "block",
+            }}
+          />
         )}
-        {gradcamB64 && (
+        {!demoMode && (
           <div style={{ display: "flex", gap: 10, marginTop: 6, justifyContent: "flex-end" }}>
             {[
               { color: "#00f", label: "Low influence" },
@@ -1990,8 +1976,7 @@ export default function ScreenPage() {
                         />
                       </div>
                       <VisualAnalysisPanel
-                        melB64={explain.mel_spectrogram_b64}
-                        gradcamB64={explain.gradcam_b64}
+                        screeningId={explain.screening_id}
                         demoMode={explain.demo_mode}
                       />
                       <RMSEnvelopeChart envelope={explain.acoustic_features.rms_envelope} />

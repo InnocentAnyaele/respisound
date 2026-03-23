@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from typing import Optional, List
 
@@ -634,6 +634,69 @@ def explain_screening(screening_id: str):
         processing_pipeline=pipeline,
         model_uncertainty=uncertainty,
     )
+
+
+@app.get("/explain/{screening_id}/mel.png", response_class=Response)
+def explain_mel_png(screening_id: str):
+    """Serve the mel spectrogram as a PNG image (avoids data-URI CSP issues in packaged app)."""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT audio_filename FROM screenings WHERE id = ?", (screening_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Screening not found")
+        audio_filename = row["audio_filename"]
+    finally:
+        conn.close()
+
+    audio_path = str(UPLOADS_DIR / audio_filename)
+    if not Path(audio_path).exists():
+        raise HTTPException(status_code=404, detail="Audio file not found")
+
+    try:
+        png_b64 = generate_mel_png(audio_path)
+        png_bytes = base64.b64decode(png_b64)
+    except Exception as e:
+        logger.error("mel PNG failed: %s", str(e))
+        raise HTTPException(status_code=500, detail="Could not generate spectrogram")
+
+    return Response(content=png_bytes, media_type="image/png")
+
+
+@app.get("/explain/{screening_id}/gradcam.png", response_class=Response)
+def explain_gradcam_png(screening_id: str):
+    """Serve the GradCAM heatmap as a PNG image (avoids data-URI CSP issues in packaged app)."""
+    if model is None:
+        raise HTTPException(status_code=503, detail="GradCAM requires a loaded model")
+
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT audio_filename FROM screenings WHERE id = ?", (screening_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Screening not found")
+        audio_filename = row["audio_filename"]
+    finally:
+        conn.close()
+
+    audio_path = str(UPLOADS_DIR / audio_filename)
+    if not Path(audio_path).exists():
+        raise HTTPException(status_code=404, detail="Audio file not found")
+
+    try:
+        png_b64 = compute_gradcam(audio_path)
+        if not png_b64:
+            raise HTTPException(status_code=500, detail="GradCAM computation returned empty result")
+        png_bytes = base64.b64decode(png_b64)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("GradCAM PNG failed: %s", str(e))
+        raise HTTPException(status_code=500, detail="Could not generate GradCAM")
+
+    return Response(content=png_bytes, media_type="image/png")
 
 
 @app.get("/stats")
