@@ -842,7 +842,7 @@ function RMSEnvelopeChart({ envelope }: { envelope: number[] }) {
                 fontSize: 11,
                 borderRadius: 7,
                 border: "1px solid var(--border)",
-                background: "var(--surface)",
+                background: "var(--bg-card)",
                 boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
               }}
               formatter={(val: unknown) => [`${val}`, "RMS ×10⁻³"]}
@@ -1245,7 +1245,7 @@ export default function ScreenPage() {
 
   return (
     <Layout>
-      <div style={{ padding: "28px 32px", maxWidth: 1100 }}>
+      <div style={{ padding: "24px 36px" }}>
         {/* ── Page header ── */}
         <div style={{ marginBottom: 24 }}>
           <h1
@@ -1268,8 +1268,8 @@ export default function ScreenPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "400px 1fr",
-            gap: 18,
+            gridTemplateColumns: "300px 1fr",
+            gap: 20,
           }}
         >
           {/* Left — patient details + audio */}
@@ -1596,7 +1596,7 @@ export default function ScreenPage() {
                 <div
                   className="card"
                   style={{
-                    padding: 22,
+                    padding: "22px 26px",
                     borderColor: `${CLASS_COLORS[result.predicted_class]}30`,
                     borderWidth: 1.5,
                   }}
@@ -1617,19 +1617,24 @@ export default function ScreenPage() {
                     </div>
                   )}
 
+                  {/* ── Horizontal result header ── */}
                   <div
                     style={{
-                      display: "flex",
+                      display: "grid",
+                      gridTemplateColumns: "auto 1fr auto",
+                      gap: 20,
                       alignItems: "center",
-                      gap: 16,
                       marginBottom: 20,
+                      paddingBottom: 20,
+                      borderBottom: "1px solid var(--border)",
                     }}
                   >
+                    {/* Confidence gauge */}
                     <div style={{ position: "relative", flexShrink: 0 }}>
                       <CircularProgress
                         value={result.confidence}
                         color={CLASS_COLORS[result.predicted_class] || "var(--blue)"}
-                        size={100}
+                        size={96}
                       />
                       <div
                         style={{
@@ -1643,7 +1648,7 @@ export default function ScreenPage() {
                       >
                         <span
                           style={{
-                            fontSize: 18,
+                            fontSize: 17,
                             fontWeight: 700,
                             color: "var(--text-primary)",
                             letterSpacing: "-0.04em",
@@ -1653,9 +1658,9 @@ export default function ScreenPage() {
                         </span>
                         <span
                           style={{
-                            fontSize: 9,
+                            fontSize: 8,
                             color: "var(--text-tertiary)",
-                            fontWeight: 500,
+                            fontWeight: 600,
                             textTransform: "uppercase",
                             letterSpacing: "0.04em",
                           }}
@@ -1664,26 +1669,28 @@ export default function ScreenPage() {
                         </span>
                       </div>
                     </div>
+
+                    {/* Class name + description */}
                     <div>
                       <div
                         style={{
-                          fontSize: 11,
+                          fontSize: 10,
                           fontWeight: 600,
                           color: "var(--text-tertiary)",
                           textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                          marginBottom: 4,
+                          letterSpacing: "0.06em",
+                          marginBottom: 3,
                         }}
                       >
                         Predicted Condition
                       </div>
                       <div
                         style={{
-                          fontSize: 26,
+                          fontSize: 28,
                           fontWeight: 700,
                           color: CLASS_COLORS[result.predicted_class] || "var(--text-primary)",
                           letterSpacing: "-0.04em",
-                          lineHeight: 1.1,
+                          lineHeight: 1.05,
                           marginBottom: 6,
                         }}
                       >
@@ -1696,68 +1703,78 @@ export default function ScreenPage() {
                         Screening Result
                       </span>
                     </div>
-                  </div>
 
-                  {DISEASE_INFO[result.predicted_class] && (
-                    <div
-                      style={{
-                        background: CLASS_BG[result.predicted_class] || "var(--bg)",
-                        borderRadius: 10,
-                        padding: "13px 15px",
-                        marginBottom: 18,
-                      }}
-                    >
+                    {/* Disease info + action (right side) */}
+                    {DISEASE_INFO[result.predicted_class] && (
                       <div
                         style={{
-                          fontSize: 13,
-                          color: "var(--text-primary)",
-                          lineHeight: 1.55,
-                          marginBottom: 6,
+                          background: CLASS_BG[result.predicted_class] || "var(--bg)",
+                          borderRadius: 10,
+                          padding: "14px 16px",
+                          maxWidth: 340,
+                          minWidth: 260,
                         }}
                       >
-                        {DISEASE_INFO[result.predicted_class].short}
-                      </div>
-                      <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
-                        <svg
-                          width="13"
-                          height="13"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke={CLASS_COLORS[result.predicted_class] || "var(--blue)"}
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          style={{ flexShrink: 0, marginTop: 1 }}
-                        >
-                          <polyline points="9 11 12 14 22 4" />
-                          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                        </svg>
-                        <span
+                        <div
                           style={{
                             fontSize: 12,
-                            color: CLASS_COLORS[result.predicted_class] || "var(--blue)",
-                            fontWeight: 500,
+                            color: "var(--text-primary)",
+                            lineHeight: 1.6,
+                            marginBottom: 8,
                           }}
                         >
-                          {DISEASE_INFO[result.predicted_class].action}
-                        </span>
+                          {DISEASE_INFO[result.predicted_class].short}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke={CLASS_COLORS[result.predicted_class] || "var(--blue)"}
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            style={{ flexShrink: 0, marginTop: 1 }}
+                          >
+                            <polyline points="9 11 12 14 22 4" />
+                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                          </svg>
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: CLASS_COLORS[result.predicted_class] || "var(--blue)",
+                              fontWeight: 500,
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {DISEASE_INFO[result.predicted_class].action}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
 
+                  {/* ── All class probabilities (2-column grid) ── */}
                   <div
                     style={{
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: 600,
                       color: "var(--text-tertiary)",
                       textTransform: "uppercase",
-                      letterSpacing: "0.05em",
+                      letterSpacing: "0.06em",
                       marginBottom: 12,
                     }}
                   >
                     All Class Probabilities
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "8px 28px",
+                    }}
+                  >
                     {sortedProbs.map(([cls, prob]) => {
                       const isTop = cls === result.predicted_class;
                       return (
@@ -1770,9 +1787,7 @@ export default function ScreenPage() {
                               marginBottom: 5,
                             }}
                           >
-                            <div
-                              style={{ display: "flex", alignItems: "center", gap: 7 }}
-                            >
+                            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                               <div
                                 style={{
                                   width: 8,
@@ -1787,9 +1802,7 @@ export default function ScreenPage() {
                                 style={{
                                   fontSize: 13,
                                   fontWeight: isTop ? 600 : 400,
-                                  color: isTop
-                                    ? "var(--text-primary)"
-                                    : "var(--text-secondary)",
+                                  color: isTop ? "var(--text-primary)" : "var(--text-secondary)",
                                 }}
                               >
                                 {cls}
@@ -1815,9 +1828,7 @@ export default function ScreenPage() {
                               style={{
                                 fontSize: 12,
                                 fontWeight: isTop ? 600 : 400,
-                                color: isTop
-                                  ? "var(--text-primary)"
-                                  : "var(--text-tertiary)",
+                                color: isTop ? "var(--text-primary)" : "var(--text-tertiary)",
                               }}
                             >
                               {(prob * 100).toFixed(1)}%
@@ -1889,7 +1900,7 @@ export default function ScreenPage() {
                     style={{
                       padding: "14px 16px",
                       borderRadius: 10,
-                      background: "var(--surface)",
+                      background: "var(--bg-card)",
                       border: "1px solid var(--border)",
                       display: "flex",
                       alignItems: "center",
@@ -1929,7 +1940,7 @@ export default function ScreenPage() {
                   flexDirection: "column",
                   alignItems: "center",
                   justifyContent: "center",
-                  minHeight: 320,
+                  minHeight: 440,
                   textAlign: "center",
                 }}
               >
