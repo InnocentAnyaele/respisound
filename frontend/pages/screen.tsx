@@ -1272,8 +1272,8 @@ export default function ScreenPage() {
             gap: 20,
           }}
         >
-          {/* Left — patient details + audio */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* Left — patient details + audio (sticky so form stays visible while scrolling analysis) */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, position: "sticky", top: 24, alignSelf: "start" }}>
             {/* Patient details */}
             <div className="card" style={{ padding: 20 }}>
               <div
@@ -1420,6 +1420,10 @@ export default function ScreenPage() {
                         fontWeight: 500,
                         color: "var(--text-primary)",
                         marginBottom: 2,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        maxWidth: "100%",
                       }}
                     >
                       {file.name}
@@ -1491,6 +1495,8 @@ export default function ScreenPage() {
                       alignItems: "center",
                       justifyContent: "space-between",
                       marginTop: 8,
+                      minWidth: 0,
+                      gap: 8,
                     }}
                   >
                     <button
@@ -1526,7 +1532,7 @@ export default function ScreenPage() {
                         </svg>
                       )}
                     </button>
-                    <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                    <span style={{ fontSize: 11, color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
                       {file.name}
                     </span>
                   </div>
@@ -1930,6 +1936,72 @@ export default function ScreenPage() {
                     {explainError}
                   </div>
                 )}
+
+                {/* ── AI Analysis Dashboard — flows directly below disclaimer, no gap ── */}
+                {explain && (
+                  <div>
+                    {/* Section divider */}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 14,
+                        marginBottom: 16,
+                      }}
+                    >
+                      <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 7,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: "var(--text-tertiary)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.08em",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                        </svg>
+                        AI Analysis Dashboard
+                        {explain.demo_mode && (
+                          <span style={{ fontSize: 10, background: "var(--bg)", border: "1px solid var(--border)", padding: "1px 7px", borderRadius: 8, color: "var(--text-tertiary)", textTransform: "none", letterSpacing: 0 }}>
+                            demo mode
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                      <PipelineStepper steps={explain.processing_pipeline} />
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+                        <FrequencyBandChart data={explain.acoustic_features.freq_band_energy} />
+                        <MFCCChart
+                          values={explain.acoustic_features.mfcc_means}
+                          classColor={CLASS_COLORS[result.predicted_class] || "var(--blue)"}
+                        />
+                        <SpectralMetricsCard
+                          features={explain.acoustic_features}
+                          uncertainty={explain.model_uncertainty}
+                        />
+                      </div>
+                      <VisualAnalysisPanel
+                        melB64={explain.mel_spectrogram_b64}
+                        gradcamB64={explain.gradcam_b64}
+                        demoMode={explain.demo_mode}
+                      />
+                      <RMSEnvelopeChart envelope={explain.acoustic_features.rms_envelope} />
+                      <ClinicalInterpretation
+                        result={result}
+                        uncertainty={explain.model_uncertainty}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div
@@ -2017,102 +2089,6 @@ export default function ScreenPage() {
           </div>
         </div>
 
-        {/* ── Full-width AI Analysis Dashboard ── */}
-        {result && explain && (
-          <div className="animate-fade-up" style={{ marginTop: 24 }}>
-            {/* Section divider */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 14,
-                marginBottom: 18,
-              }}
-            >
-              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 7,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: "var(--text-tertiary)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                </svg>
-                AI Analysis Dashboard
-                {explain.demo_mode && (
-                  <span
-                    style={{
-                      fontSize: 10,
-                      background: "var(--bg)",
-                      border: "1px solid var(--border)",
-                      padding: "1px 7px",
-                      borderRadius: 8,
-                      color: "var(--text-tertiary)",
-                      textTransform: "none",
-                      letterSpacing: 0,
-                    }}
-                  >
-                    demo mode
-                  </span>
-                )}
-              </div>
-              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {/* Row 1 — Processing pipeline */}
-              <PipelineStepper steps={explain.processing_pipeline} />
-
-              {/* Row 2 — Acoustic analytics (3 columns) */}
-              <div
-                style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}
-              >
-                <FrequencyBandChart data={explain.acoustic_features.freq_band_energy} />
-                <MFCCChart
-                  values={explain.acoustic_features.mfcc_means}
-                  classColor={CLASS_COLORS[result.predicted_class] || "var(--blue)"}
-                />
-                <SpectralMetricsCard
-                  features={explain.acoustic_features}
-                  uncertainty={explain.model_uncertainty}
-                />
-              </div>
-
-              {/* Row 3 — Visual analysis (mel + gradcam) */}
-              <VisualAnalysisPanel
-                melB64={explain.mel_spectrogram_b64}
-                gradcamB64={explain.gradcam_b64}
-                demoMode={explain.demo_mode}
-              />
-
-              {/* Row 4 — RMS energy envelope */}
-              <RMSEnvelopeChart envelope={explain.acoustic_features.rms_envelope} />
-
-              {/* Row 5 — Clinical interpretation */}
-              <ClinicalInterpretation
-                result={result}
-                uncertainty={explain.model_uncertainty}
-              />
-            </div>
-          </div>
-        )}
       </div>
     </Layout>
   );
