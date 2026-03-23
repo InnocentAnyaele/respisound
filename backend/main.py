@@ -190,6 +190,89 @@ def generate_mel_png(audio_path: str) -> str:
     return base64.b64encode(buf.read()).decode("utf-8")
 
 
+def compute_acoustic_features(audio_path: str) -> dict:
+    """Extract rich acoustic features for clinical explainability."""
+    import librosa
+
+    y, sr = librosa.load(audio_path, sr=TARGET_SAMPLE_RATE, mono=True)
+    y = np.asarray(y, dtype=np.float32)
+    if y.shape[0] < TARGET_NUM_SAMPLES:
+        y = np.pad(y, (0, TARGET_NUM_SAMPLES - y.shape[0]))
+    else:
+        y = y[:TARGET_NUM_SAMPLES]
+
+    mel = librosa.feature.melspectrogram(y=y, sr=sr, n_fft=2048, hop_length=512, n_mels=128)
+    mel_db = librosa.power_to_db(mel, ref=np.max)
+    mel_power = librosa.db_to_power(mel_db)
+    mel_freqs = librosa.mel_frequencies(n_mels=128, fmin=0.0, fmax=float(sr) / 2.0)
+
+    total_energy = float(mel_power.sum()) + 1e-8
+    band_defs = {
+        "Sub-bass (0–250 Hz)": (0.0, 250.0),
+        "Bass/Mid (250–2k Hz)": (250.0, 2000.0),
+        "Upper-mid (2k–6k Hz)": (2000.0, 6000.0),
+        "High-freq (6k–8k Hz)": (6000.0, float(sr) / 2.0),
+    }
+    freq_band_energy: dict = {}
+    for name, (lo, hi) in band_defs.items():
+        mask = (mel_freqs >= lo) & (mel_freqs < hi)
+        freq_band_energy[name] = (
+            round(float(mel_power[mask].sum() / total_energy * 100), 1) if mask.any() else 0.0
+        )
+
+    mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13, n_fft=2048, hop_length=512)
+    mfcc_means = [round(float(v), 2) for v in mfccs.mean(axis=1)]
+
+    rms = librosa.feature.rms(y=y, frame_length=2048, hop_length=512)[0]
+    idxs = np.linspace(0, len(rms) - 1, 24, dtype=int)
+    rms_envelope = [round(float(rms[i]), 4) for i in idxs]
+
+    centroid = librosa.feature.spectral_centroid(y=y, sr=sr, n_fft=2048, hop_length=512)[0]
+    bandwidth = librosa.feature.spectral_bandwidth(y=y, sr=sr, n_fft=2048, hop_length=512)[0]
+    zcr = librosa.feature.zero_crossing_rate(y=y, frame_length=2048, hop_length=512)[0]
+
+    return {
+        "freq_band_energy": freq_band_energy,
+        "mfcc_means": mfcc_means,
+        "rms_envelope": rms_envelope,
+        "spectral_centroid_mean": round(float(centroid.mean()), 1),
+        "spectral_bandwidth_mean": round(float(bandwidth.mean()), 1),
+        "zero_crossing_rate_mean": round(float(zcr.mean()), 4),
+        "duration_s": round(float(len(y) / sr), 3),
+        "sample_rate": int(sr),
+    }
+
+
+def compute_uncertainty(probabilities: dict) -> dict:
+    """Shannon entropy-based model uncertainty and confidence tier."""
+    probs = np.array(list(probabilities.values()), dtype=np.float64)
+    n = len(probs)
+    entropy = float(-np.sum(probs * np.log(probs + 1e-8)) / np.log(n))
+    sorted_p = sorted(probs, reverse=True)
+    margin = round(float(sorted_p[0] - sorted_p[1]), 3)
+    top_conf = sorted_p[0]
+    tier = "High" if top_conf >= 0.80 else ("Moderate" if top_conf >= 0.55 else "Low")
+    return {"entropy": round(entropy, 3), "margin": margin, "confidence_tier": tier}
+
+
+def get_processing_pipeline(audio_path: str, mel_shape: tuple) -> list:
+    """Ordered list of processing steps applied to the audio sample."""
+    ext = Path(audio_path).suffix.upper().lstrip(".") or "WAV"
+    try:
+        size_kb = round(os.path.getsize(audio_path) / 1024, 1)
+    except OSError:
+        size_kb = 0.0
+    return [
+        {"step": "Load",            "detail": f"Decode {ext} file to raw PCM waveform",              "value": f"{size_kb} KB"},
+        {"step": "Resample",        "detail": "Convert to 16 kHz single-channel mono",               "value": "16,000 Hz"},
+        {"step": "Pad / Trim",      "detail": "Fixed-length 1.5 s analysis window",                  "value": "24,000 samples"},
+        {"step": "Mel Filter",      "detail": "128-band mel filter bank (n_fft=2048, hop=512)",       "value": f"{mel_shape[0]}×{mel_shape[1]}"},
+        {"step": "Power → dB",      "detail": "Log-amplitude scaling referenced to spectral peak",    "value": "dB scale"},
+        {"step": "Z-Score Norm",    "detail": "Per-spectrogram standardisation (ε=1e-6)",             "value": "μ=0, σ=1"},
+        {"step": "CRNN Inference",  "detail": "2×Conv + BatchNorm → LSTM(128) → FC → Softmax",       "value": "5 classes"},
+    ]
+
+
 def compute_gradcam(audio_path: str) -> str:
     """
     GradCAM on model.cnn[4] (the second Conv2d, 32→64 channels).
@@ -311,6 +394,9 @@ class ExplainResponse(BaseModel):
     mel_spectrogram_b64: str
     gradcam_b64: str
     demo_mode: bool
+    acoustic_features: dict
+    processing_pipeline: List[dict]
+    model_uncertainty: dict
 
 
 @app.get("/health")
@@ -472,17 +558,20 @@ def get_screening(screening_id: str):
 def explain_screening(screening_id: str):
     """
     Called fire-and-forget from the frontend after prediction returns.
-    Generates mel spectrogram + GradCAM images for the stored screening.
-    Runs synchronously so PyTorch backward() stays off the event loop.
+    Returns mel spectrogram, GradCAM, acoustic features, processing pipeline,
+    and model uncertainty. Runs synchronously so PyTorch backward() stays off
+    the async event loop.
     """
     conn = get_db()
     try:
         row = conn.execute(
-            "SELECT audio_filename FROM screenings WHERE id = ?", (screening_id,)
+            "SELECT audio_filename, probabilities FROM screenings WHERE id = ?",
+            (screening_id,),
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Screening not found")
         audio_filename = row["audio_filename"]
+        probabilities = json.loads(row["probabilities"])
     finally:
         conn.close()
 
@@ -499,16 +588,38 @@ def explain_screening(screening_id: str):
         mel_b64 = ""
 
     try:
-        gradcam_b64 = compute_gradcam(audio_path)
+        gradcam_b64 = compute_gradcam(audio_path) if not is_demo else ""
     except Exception as e:
         logger.error("GradCAM failed: %s", str(e))
         gradcam_b64 = ""
+
+    try:
+        acoustic = compute_acoustic_features(audio_path)
+    except Exception as e:
+        logger.error("Acoustic features failed: %s", str(e))
+        acoustic = {
+            "freq_band_energy": {}, "mfcc_means": [], "rms_envelope": [],
+            "spectral_centroid_mean": 0.0, "spectral_bandwidth_mean": 0.0,
+            "zero_crossing_rate_mean": 0.0, "duration_s": 1.5, "sample_rate": 16000,
+        }
+
+    try:
+        feats = extract_features(audio_path)
+        mel_shape = (feats.shape[2], feats.shape[3])
+    except Exception:
+        mel_shape = (128, 47)
+    pipeline = get_processing_pipeline(audio_path, mel_shape)
+
+    uncertainty = compute_uncertainty(probabilities)
 
     return ExplainResponse(
         screening_id=screening_id,
         mel_spectrogram_b64=mel_b64,
         gradcam_b64=gradcam_b64,
         demo_mode=is_demo,
+        acoustic_features=acoustic,
+        processing_pipeline=pipeline,
+        model_uncertainty=uncertainty,
     )
 
 

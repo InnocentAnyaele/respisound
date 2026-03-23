@@ -1,6 +1,24 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import Layout from "../components/Layout";
-import { api, Screening, Patient, ExplainResponse } from "../lib/api";
+import {
+  api,
+  Screening,
+  Patient,
+  ExplainResponse,
+  AcousticFeatures,
+  ModelUncertainty,
+  ProcessingStep,
+} from "../lib/api";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const CLASS_COLORS: Record<string, string> = {
   COPD: "#ff3b30",
@@ -41,6 +59,118 @@ const DISEASE_INFO: Record<string, { short: string; action: string }> = {
   },
 };
 
+const CLINICAL_MARKERS: Record<
+  string,
+  {
+    markers: string[];
+    urgency: string;
+    urgencyColor: string;
+    differentials: string[];
+    follow_up: string[];
+  }
+> = {
+  COPD: {
+    markers: [
+      "Reduced high-frequency energy consistent with airflow obstruction",
+      "Prolonged expiratory phase pattern in temporal analysis",
+      "Low spectral centroid indicating predominant low-frequency pathology",
+    ],
+    urgency: "Urgent Referral",
+    urgencyColor: "#ff3b30",
+    differentials: ["Asthma (reversible component)", "Cardiac dyspnoea", "Bronchiectasis"],
+    follow_up: [
+      "Spirometry with bronchodilator reversibility testing (GOLD criteria)",
+      "Chest X-ray to assess hyperinflation and exclude malignancy",
+      "ABG if SpO₂ < 92% or significant breathlessness",
+      "Refer to pulmonologist for GOLD staging and inhaler initiation",
+    ],
+  },
+  Asthma: {
+    markers: [
+      "Mid-frequency resonance patterns consistent with bronchospasm",
+      "Variable airflow limitation signatures detected",
+      "Elevated spectral bandwidth suggesting turbulent airflow",
+    ],
+    urgency: "Priority Assessment",
+    urgencyColor: "#ff9500",
+    differentials: ["COPD (fixed obstruction)", "Vocal cord dysfunction", "Cardiac wheeze"],
+    follow_up: [
+      "Peak flow measurement before and after bronchodilator",
+      "FeNO test if allergic asthma suspected",
+      "Review trigger factors (allergens, occupational, NSAID/β-blocker use)",
+      "Consider step-up therapy per BTS/SIGN guidelines",
+    ],
+  },
+  Pneumonia: {
+    markers: [
+      "Attenuated high-frequency content consistent with consolidation",
+      "Low-frequency crackling signatures in temporal segments",
+      "Asymmetric spectral energy distribution across time windows",
+    ],
+    urgency: "Urgent",
+    urgencyColor: "#ff3b30",
+    differentials: ["COPD exacerbation", "Pulmonary oedema", "Lung abscess"],
+    follow_up: [
+      "CURB-65 score for severity assessment and admission decision",
+      "Chest X-ray (PA and lateral) urgently",
+      "FBC, CRP, blood cultures if febrile",
+      "Sputum culture before antibiotic initiation",
+    ],
+  },
+  Bronchitis: {
+    markers: [
+      "Productive cough signatures with mid-band turbulence",
+      "Elevated low-frequency energy consistent with mucus secretion",
+      "Moderate spectral centroid indicating mid-airway involvement",
+    ],
+    urgency: "Non-urgent",
+    urgencyColor: "#0071e3",
+    differentials: ["Early COPD", "Whooping cough (Pertussis)", "Post-nasal drip"],
+    follow_up: [
+      "Reassess in 3–4 weeks if symptoms do not resolve",
+      "Antibiotics only if bacterial origin suspected (purulent sputum, fever)",
+      "Smoking cessation counselling if applicable",
+      "Spirometry if symptoms persist >3 months in 2 consecutive years",
+    ],
+  },
+  Healthy: {
+    markers: [
+      "Normal spectral distribution across all frequency bands",
+      "Low zero-crossing rate consistent with clear, unobstructed airways",
+      "Balanced energy profile — no pathological frequency signatures detected",
+    ],
+    urgency: "Routine",
+    urgencyColor: "#34c759",
+    differentials: ["Sub-clinical early disease (single-sample screening limitation)"],
+    follow_up: [
+      "Routine follow-up per scheduled health screening intervals",
+      "Counsel patient that screening supplements but does not replace clinical exam",
+      "Repeat screening if new respiratory symptoms develop",
+    ],
+  },
+};
+
+// ─── Small shared helpers ─────────────────────────────────────────────────────
+
+function SLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        fontSize: 11,
+        fontWeight: 600,
+        color: "var(--text-tertiary)",
+        textTransform: "uppercase",
+        letterSpacing: "0.07em",
+        marginBottom: 12,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ─── WaveformVisualiser ───────────────────────────────────────────────────────
+
 function WaveformVisualiser({ playing }: { playing: boolean }) {
   const bars = Array.from({ length: 32 });
   return (
@@ -75,21 +205,23 @@ function WaveformVisualiser({ playing }: { playing: boolean }) {
   );
 }
 
-function CircularProgress({ value, color, size = 110 }: { value: number; color: string; size?: number }) {
+// ─── CircularProgress ─────────────────────────────────────────────────────────
+
+function CircularProgress({
+  value,
+  color,
+  size = 110,
+}: {
+  value: number;
+  color: string;
+  size?: number;
+}) {
   const r = (size - 16) / 2;
   const circumference = 2 * Math.PI * r;
   const offset = circumference - value * circumference;
-
   return (
     <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        stroke="var(--bg)"
-        strokeWidth={8}
-      />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--bg)" strokeWidth={8} />
       <circle
         cx={size / 2}
         cy={size / 2}
@@ -105,6 +237,884 @@ function CircularProgress({ value, color, size = 110 }: { value: number; color: 
     </svg>
   );
 }
+
+// ─── PipelineStepper ──────────────────────────────────────────────────────────
+
+function PipelineStepper({ steps }: { steps: ProcessingStep[] }) {
+  return (
+    <div className="card" style={{ padding: "18px 22px" }}>
+      <SLabel>Audio Processing Pipeline</SLabel>
+      <div style={{ display: "flex", alignItems: "flex-start", overflowX: "auto", paddingBottom: 4 }}>
+        {steps.map((s, i) => (
+          <React.Fragment key={s.step}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                flex: "1 0 auto",
+                minWidth: 96,
+                maxWidth: 130,
+              }}
+            >
+              <div
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: "50%",
+                  background:
+                    i === steps.length - 1
+                      ? "var(--blue)"
+                      : i === 0
+                      ? "#f0f2f5"
+                      : `hsl(${210 + i * 8}, 60%, 94%)`,
+                  border:
+                    i === steps.length - 1
+                      ? "none"
+                      : "1.5px solid var(--border)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color:
+                    i === steps.length - 1 ? "#fff" : "var(--text-secondary)",
+                  flexShrink: 0,
+                }}
+              >
+                {i + 1}
+              </div>
+              <div style={{ marginTop: 9, textAlign: "center", padding: "0 4px" }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "var(--text-primary)",
+                    marginBottom: 3,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {s.step}
+                </div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "var(--text-tertiary)",
+                    lineHeight: 1.45,
+                    marginBottom: 6,
+                  }}
+                >
+                  {s.detail}
+                </div>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: "var(--blue)",
+                    background: "var(--blue-light)",
+                    padding: "2px 8px",
+                    borderRadius: 10,
+                    display: "inline-block",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {s.value}
+                </span>
+              </div>
+            </div>
+
+            {i < steps.length - 1 && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  marginTop: 15,
+                  flex: "0 0 18px",
+                  paddingBottom: 2,
+                }}
+              >
+                <svg width="18" height="8" viewBox="0 0 18 8" fill="none">
+                  <path
+                    d="M0 4H14M14 4L11 1.5M14 4L11 6.5"
+                    stroke="var(--border)"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
+            )}
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── FrequencyBandChart ───────────────────────────────────────────────────────
+
+function FrequencyBandChart({ data }: { data: Record<string, number> }) {
+  const entries = Object.entries(data);
+  const maxVal = Math.max(...entries.map(([, v]) => v), 1);
+  const colors = ["#0071e3", "#34c759", "#ff9500", "#af52de"];
+
+  return (
+    <div className="card" style={{ padding: "18px 20px" }}>
+      <SLabel>Frequency Band Energy</SLabel>
+      <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+        {entries.map(([band, pct], i) => (
+          <div key={band}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                marginBottom: 5,
+              }}
+            >
+              <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{band}</span>
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: colors[i % colors.length],
+                }}
+              >
+                {pct.toFixed(1)}%
+              </span>
+            </div>
+            <div
+              style={{
+                height: 7,
+                background: "var(--bg)",
+                borderRadius: 4,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  width: `${(pct / maxVal) * 100}%`,
+                  height: "100%",
+                  background: colors[i % colors.length],
+                  borderRadius: 4,
+                  transition: "width 0.9s cubic-bezier(0.4,0,0.2,1)",
+                }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div
+        style={{
+          marginTop: 14,
+          padding: "8px 10px",
+          background: "var(--bg)",
+          borderRadius: 7,
+          fontSize: 10,
+          color: "var(--text-tertiary)",
+          lineHeight: 1.5,
+        }}
+      >
+        Energy distribution across the four mel-filtered frequency bands. Dominant
+        bands reflect the primary spectral signature of the respiratory event.
+      </div>
+    </div>
+  );
+}
+
+// ─── MFCCChart ────────────────────────────────────────────────────────────────
+
+function MFCCChart({
+  values,
+  classColor,
+}: {
+  values: number[];
+  classColor: string;
+}) {
+  if (!values.length) return null;
+  const maxAbs = Math.max(...values.map(Math.abs), 0.1);
+
+  return (
+    <div className="card" style={{ padding: "18px 20px" }}>
+      <SLabel>MFCC Profile — 13 Coefficients</SLabel>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-end",
+          gap: 3,
+          height: 76,
+          justifyContent: "space-between",
+        }}
+      >
+        {values.map((v, i) => {
+          const pct = (Math.abs(v) / maxAbs) * 100;
+          return (
+            <div
+              key={i}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1 }}
+            >
+              <div
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  height: 64,
+                  justifyContent: "flex-end",
+                }}
+              >
+                <div
+                  style={{
+                    width: "100%",
+                    height: `${Math.max(pct, 3)}%`,
+                    background: v >= 0 ? classColor : "#ff3b30",
+                    borderRadius: "2px 2px 0 0",
+                    opacity: 0.75,
+                    transition: "height 0.9s cubic-bezier(0.4,0,0.2,1)",
+                  }}
+                />
+              </div>
+              <div style={{ fontSize: 8, color: "var(--text-tertiary)", marginTop: 3 }}>
+                {i + 1}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+        {[
+          { color: classColor, label: "Positive" },
+          { color: "#ff3b30", label: "Negative" },
+        ].map(({ color, label }) => (
+          <div
+            key={label}
+            style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "var(--text-tertiary)" }}
+          >
+            <div style={{ width: 8, height: 8, background: color, borderRadius: 2, opacity: 0.75 }} />
+            {label}
+          </div>
+        ))}
+      </div>
+      <div
+        style={{
+          marginTop: 10,
+          padding: "8px 10px",
+          background: "var(--bg)",
+          borderRadius: 7,
+          fontSize: 10,
+          color: "var(--text-tertiary)",
+          lineHeight: 1.5,
+        }}
+      >
+        Mel-Frequency Cepstral Coefficients encode the timbral shape of the cough.
+        MFCC 1–3 capture coarse spectral envelope; higher coefficients capture fine
+        texture and vocal tract resonances.
+      </div>
+    </div>
+  );
+}
+
+// ─── SpectralMetricsCard ──────────────────────────────────────────────────────
+
+function SpectralMetricsCard({
+  features,
+  uncertainty,
+}: {
+  features: AcousticFeatures;
+  uncertainty: ModelUncertainty;
+}) {
+  const tierColor =
+    uncertainty.confidence_tier === "High"
+      ? "#34c759"
+      : uncertainty.confidence_tier === "Moderate"
+      ? "#ff9500"
+      : "#ff3b30";
+
+  const metrics = [
+    {
+      label: "Prediction Entropy",
+      value: `${(uncertainty.entropy * 100).toFixed(1)}%`,
+      sub: "0 % = certain · 100 % = uniform",
+    },
+    {
+      label: "Decision Margin",
+      value: `${(uncertainty.margin * 100).toFixed(1)}%`,
+      sub: "Top-1 minus Top-2 probability",
+    },
+    {
+      label: "Spectral Centroid",
+      value: `${(features.spectral_centroid_mean / 1000).toFixed(2)} kHz`,
+      sub: "Centre of mass of spectral energy",
+    },
+    {
+      label: "Spectral Bandwidth",
+      value: `${(features.spectral_bandwidth_mean / 1000).toFixed(2)} kHz`,
+      sub: "Spread of spectral distribution",
+    },
+    {
+      label: "Zero-Crossing Rate",
+      value: features.zero_crossing_rate_mean.toFixed(4),
+      sub: "Proxy for high-frequency content",
+    },
+  ];
+
+  return (
+    <div className="card" style={{ padding: "18px 20px" }}>
+      <SLabel>Model Uncertainty & Spectral Metrics</SLabel>
+
+      {/* Confidence tier badge */}
+      <div
+        style={{
+          background: `${tierColor}12`,
+          border: `1px solid ${tierColor}30`,
+          borderRadius: 9,
+          padding: "10px 13px",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          marginBottom: 14,
+        }}
+      >
+        <div
+          style={{
+            width: 10,
+            height: 10,
+            borderRadius: "50%",
+            background: tierColor,
+            boxShadow: `0 0 0 3px ${tierColor}25`,
+            flexShrink: 0,
+          }}
+        />
+        <div>
+          <div style={{ fontSize: 10, color: "var(--text-tertiary)", marginBottom: 1 }}>
+            CONFIDENCE TIER
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: tierColor, letterSpacing: "-0.02em" }}>
+            {uncertainty.confidence_tier}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+        {metrics.map(({ label, value, sub }) => (
+          <div
+            key={label}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              paddingBottom: 9,
+              borderBottom: "1px solid var(--border)",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-secondary)" }}>
+                {label}
+              </div>
+              <div style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{sub}</div>
+            </div>
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: "var(--text-primary)",
+                flexShrink: 0,
+                marginLeft: 10,
+              }}
+            >
+              {value}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── VisualAnalysisPanel ──────────────────────────────────────────────────────
+
+function VisualAnalysisPanel({
+  melB64,
+  gradcamB64,
+  demoMode,
+}: {
+  melB64: string;
+  gradcamB64: string;
+  demoMode: boolean;
+}) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+      {/* Mel Spectrogram */}
+      <div className="card" style={{ padding: "18px 20px" }}>
+        <SLabel>Mel-Frequency Spectrogram</SLabel>
+        <p
+          style={{
+            fontSize: 11,
+            color: "var(--text-tertiary)",
+            lineHeight: 1.55,
+            marginBottom: 12,
+          }}
+        >
+          Log-power energy across 128 mel-scaled frequency bands over 1.5 s. Brighter
+          (magma) regions indicate higher energy concentration.
+        </p>
+        {melB64 ? (
+          <img
+            src={`data:image/png;base64,${melB64}`}
+            alt="Mel spectrogram"
+            style={{
+              width: "100%",
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              display: "block",
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              height: 100,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              fontSize: 12,
+              color: "var(--text-tertiary)",
+            }}
+          >
+            Spectrogram unavailable
+          </div>
+        )}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            marginTop: 6,
+            fontSize: 9,
+            color: "var(--text-tertiary)",
+          }}
+        >
+          <span>0 ms</span>
+          <span>← Time →</span>
+          <span>1500 ms</span>
+        </div>
+      </div>
+
+      {/* GradCAM */}
+      <div className="card" style={{ padding: "18px 20px" }}>
+        <SLabel>GradCAM Attention Heatmap</SLabel>
+        <p
+          style={{
+            fontSize: 11,
+            color: "var(--text-tertiary)",
+            lineHeight: 1.55,
+            marginBottom: 12,
+          }}
+        >
+          Gradient-weighted class activation map overlaid on the spectrogram. Red/warm
+          regions were most influential in driving the model's classification decision.
+        </p>
+        {gradcamB64 ? (
+          <img
+            src={`data:image/png;base64,${gradcamB64}`}
+            alt="GradCAM heatmap"
+            style={{
+              width: "100%",
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              display: "block",
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              height: 100,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "1px dashed var(--border)",
+              borderRadius: 8,
+              fontSize: 12,
+              color: "var(--text-tertiary)",
+              flexDirection: "column",
+              gap: 6,
+            }}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--text-tertiary)"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            {demoMode ? "GradCAM requires a loaded model" : "GradCAM computation failed"}
+          </div>
+        )}
+        {gradcamB64 && (
+          <div style={{ display: "flex", gap: 10, marginTop: 6, justifyContent: "flex-end" }}>
+            {[
+              { color: "#00f", label: "Low influence" },
+              { color: "#0f0", label: "Mid" },
+              { color: "#ff0", label: "High" },
+              { color: "#f00", label: "Peak" },
+            ].map(({ color, label }) => (
+              <div
+                key={label}
+                style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, color: "var(--text-tertiary)" }}
+              >
+                <div
+                  style={{ width: 7, height: 7, borderRadius: "50%", background: color, opacity: 0.8 }}
+                />
+                {label}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── RMSEnvelopeChart ─────────────────────────────────────────────────────────
+
+function RMSEnvelopeChart({ envelope }: { envelope: number[] }) {
+  if (!envelope.length) return null;
+
+  const data = envelope.map((val, i) => ({
+    t: `${Math.round((i / (envelope.length - 1)) * 1500)} ms`,
+    rms: parseFloat((val * 1000).toFixed(2)),
+  }));
+
+  return (
+    <div className="card" style={{ padding: "18px 20px" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          marginBottom: 12,
+        }}
+      >
+        <SLabel>RMS Energy Envelope</SLabel>
+        <span
+          style={{
+            fontSize: 10,
+            color: "var(--text-tertiary)",
+            background: "var(--bg)",
+            padding: "2px 8px",
+            borderRadius: 6,
+            border: "1px solid var(--border)",
+          }}
+        >
+          24 time-frames · 1500 ms window
+        </span>
+      </div>
+      <div style={{ height: 90 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
+            <defs>
+              <linearGradient id="rmsGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="var(--blue)" stopOpacity={0.28} />
+                <stop offset="95%" stopColor="var(--blue)" stopOpacity={0.02} />
+              </linearGradient>
+            </defs>
+            <XAxis
+              dataKey="t"
+              tick={{ fontSize: 9, fill: "var(--text-tertiary)" }}
+              tickLine={false}
+              axisLine={false}
+              interval="preserveStartEnd"
+            />
+            <YAxis
+              tick={{ fontSize: 9, fill: "var(--text-tertiary)" }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <Tooltip
+              contentStyle={{
+                fontSize: 11,
+                borderRadius: 7,
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
+                boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+              }}
+              formatter={(val: unknown) => [`${val}`, "RMS ×10⁻³"]}
+            />
+            <Area
+              type="monotone"
+              dataKey="rms"
+              stroke="var(--blue)"
+              strokeWidth={1.5}
+              fill="url(#rmsGrad)"
+              dot={false}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+      <div
+        style={{
+          marginTop: 8,
+          fontSize: 10,
+          color: "var(--text-tertiary)",
+          lineHeight: 1.5,
+        }}
+      >
+        Root-Mean-Square energy over time reflects breath-phase intensity transitions.
+        Sharp peaks may indicate expiratory effort; sustained high energy is consistent
+        with productive cough patterns.
+      </div>
+    </div>
+  );
+}
+
+// ─── ClinicalInterpretation ───────────────────────────────────────────────────
+
+function ClinicalInterpretation({
+  result,
+  uncertainty,
+}: {
+  result: Screening;
+  uncertainty: ModelUncertainty;
+}) {
+  const info = CLINICAL_MARKERS[result.predicted_class];
+  if (!info) return null;
+  const color = CLASS_COLORS[result.predicted_class] || "var(--blue)";
+
+  return (
+    <div className="card" style={{ padding: "18px 22px" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 18,
+          flexWrap: "wrap",
+          gap: 8,
+        }}
+      >
+        <SLabel>Clinical Interpretation</SLabel>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: info.urgencyColor,
+            background: `${info.urgencyColor}15`,
+            padding: "3px 11px",
+            borderRadius: 20,
+            border: `1px solid ${info.urgencyColor}30`,
+          }}
+        >
+          {info.urgency}
+        </span>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr 1fr",
+          gap: 20,
+        }}
+      >
+        {/* Key Acoustic Markers */}
+        <div>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: "var(--text-tertiary)",
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              marginBottom: 12,
+            }}
+          >
+            Key Acoustic Markers
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+            {info.markers.map((m, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <div
+                  style={{
+                    width: 5,
+                    height: 5,
+                    borderRadius: "50%",
+                    background: color,
+                    marginTop: 5,
+                    flexShrink: 0,
+                  }}
+                />
+                <span
+                  style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.55 }}
+                >
+                  {m}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div
+            style={{
+              marginTop: 14,
+              padding: "8px 10px",
+              background: "var(--bg)",
+              borderRadius: 7,
+              fontSize: 10,
+              color: "var(--text-tertiary)",
+              lineHeight: 1.5,
+            }}
+          >
+            Derived from spectral analysis of the 1.5 s cough window. These patterns
+            support but do not confirm the predicted diagnosis.
+          </div>
+        </div>
+
+        {/* Differential Diagnoses */}
+        <div>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: "var(--text-tertiary)",
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              marginBottom: 12,
+            }}
+          >
+            Differential Diagnoses
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+            {info.differentials.map((d, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "var(--text-tertiary)",
+                    marginTop: 1,
+                    flexShrink: 0,
+                    minWidth: 14,
+                  }}
+                >
+                  {i + 1}.
+                </div>
+                <span
+                  style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.55 }}
+                >
+                  {d}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Probability comparison mini-bar for top differentials */}
+          <div style={{ marginTop: 14 }}>
+            <div
+              style={{
+                fontSize: 10,
+                color: "var(--text-tertiary)",
+                marginBottom: 7,
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                fontWeight: 600,
+              }}
+            >
+              All class probabilities
+            </div>
+            {Object.entries(result.probabilities)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 3)
+              .map(([cls, p]) => (
+                <div key={cls} style={{ marginBottom: 6 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontSize: 10,
+                      color:
+                        cls === result.predicted_class
+                          ? "var(--text-primary)"
+                          : "var(--text-tertiary)",
+                      fontWeight: cls === result.predicted_class ? 600 : 400,
+                      marginBottom: 2,
+                    }}
+                  >
+                    <span>{cls}</span>
+                    <span>{(p * 100).toFixed(1)}%</span>
+                  </div>
+                  <div
+                    style={{
+                      height: 4,
+                      background: "var(--bg)",
+                      borderRadius: 3,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${p * 100}%`,
+                        height: "100%",
+                        background: CLASS_COLORS[cls] || "var(--blue)",
+                        borderRadius: 3,
+                        opacity: cls === result.predicted_class ? 1 : 0.4,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+
+        {/* Recommended Actions */}
+        <div>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: "var(--text-tertiary)",
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              marginBottom: 12,
+            }}
+          >
+            Recommended Clinical Actions
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+            {info.follow_up.map((step, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke={color}
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{ flexShrink: 0, marginTop: 2 }}
+                >
+                  <polyline points="9 11 12 14 22 4" />
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                </svg>
+                <span
+                  style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.55 }}
+                >
+                  {step}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ScreenPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -134,12 +1144,22 @@ export default function ScreenPage() {
     e.preventDefault();
     setIsDragging(false);
     const f = e.dataTransfer.files[0];
-    if (f) { setFile(f); setAudioUrl(URL.createObjectURL(f)); setResult(null); setError(null); }
+    if (f) {
+      setFile(f);
+      setAudioUrl(URL.createObjectURL(f));
+      setResult(null);
+      setError(null);
+    }
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) { setFile(f); setAudioUrl(URL.createObjectURL(f)); setResult(null); setError(null); }
+    if (f) {
+      setFile(f);
+      setAudioUrl(URL.createObjectURL(f));
+      setResult(null);
+      setError(null);
+    }
   };
 
   const togglePlay = () => {
@@ -162,6 +1182,7 @@ export default function ScreenPage() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setExplain(null);
     try {
       let patientId: string | undefined;
       if (patientName.trim()) {
@@ -178,27 +1199,43 @@ export default function ScreenPage() {
       if (notes.trim()) fd.append("notes", notes.trim());
       const s = await api.screenAudio(fd);
       setResult(s);
-      // Fire-and-forget — does not block showing the prediction
       setExplainLoading(true);
-      setExplain(null);
       setExplainError(null);
-      api.explainScreening(s.id)
+      api
+        .explainScreening(s.id)
         .then((exp) => setExplain(exp))
-        .catch((err: any) => setExplainError(err.message || "Could not load explainability data."))
+        .catch((err: unknown) =>
+          setExplainError(
+            err instanceof Error ? err.message : "Could not load analysis data."
+          )
+        )
         .finally(() => setExplainLoading(false));
-    } catch (err: any) {
-      setError(err.message || "Screening failed. Please try again.");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : "Screening failed. Please try again."
+      );
     } finally {
       setLoading(false);
     }
   };
 
   const reset = () => {
-    setFile(null); setAudioUrl(null); setResult(null); setError(null);
-    setPatientName(""); setPatientAge(""); setPatientGender(""); setNotes("");
-    setExplain(null); setExplainLoading(false); setExplainError(null);
+    setFile(null);
+    setAudioUrl(null);
+    setResult(null);
+    setError(null);
+    setPatientName("");
+    setPatientAge("");
+    setPatientGender("");
+    setNotes("");
+    setExplain(null);
+    setExplainLoading(false);
+    setExplainError(null);
     setIsPlaying(false);
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -208,9 +1245,18 @@ export default function ScreenPage() {
 
   return (
     <Layout>
-      <div style={{ padding: "28px 32px", maxWidth: 1040 }}>
+      <div style={{ padding: "28px 32px", maxWidth: 1100 }}>
+        {/* ── Page header ── */}
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 650, color: "var(--text-primary)", letterSpacing: "-0.03em", marginBottom: 3 }}>
+          <h1
+            style={{
+              fontSize: 22,
+              fontWeight: 650,
+              color: "var(--text-primary)",
+              letterSpacing: "-0.03em",
+              marginBottom: 3,
+            }}
+          >
             New Screening
           </h1>
           <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>
@@ -218,25 +1264,64 @@ export default function ScreenPage() {
           </p>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: result ? "420px 1fr" : "420px 1fr", gap: 18 }}>
+        {/* ── Form + results grid ── */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "400px 1fr",
+            gap: 18,
+          }}
+        >
+          {/* Left — patient details + audio */}
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* Patient details */}
             <div className="card" style={{ padding: 20 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", marginBottom: 14, letterSpacing: "-0.01em" }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "var(--text-primary)",
+                  marginBottom: 14,
+                  letterSpacing: "-0.01em",
+                }}
+              >
                 Patient Details
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
                 <div>
-                  <div className="label" style={{ marginBottom: 5 }}>Full Name</div>
-                  <input className="input-field" placeholder="Optional" value={patientName} onChange={(e) => setPatientName(e.target.value)} />
+                  <div className="label" style={{ marginBottom: 5 }}>
+                    Full Name
+                  </div>
+                  <input
+                    className="input-field"
+                    placeholder="Optional"
+                    value={patientName}
+                    onChange={(e) => setPatientName(e.target.value)}
+                  />
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <div>
-                    <div className="label" style={{ marginBottom: 5 }}>Age</div>
-                    <input className="input-field" type="number" placeholder="Years" value={patientAge} onChange={(e) => setPatientAge(e.target.value)} />
+                    <div className="label" style={{ marginBottom: 5 }}>
+                      Age
+                    </div>
+                    <input
+                      className="input-field"
+                      type="number"
+                      placeholder="Years"
+                      value={patientAge}
+                      onChange={(e) => setPatientAge(e.target.value)}
+                    />
                   </div>
                   <div>
-                    <div className="label" style={{ marginBottom: 5 }}>Gender</div>
-                    <select className="input-field" value={patientGender} onChange={(e) => setPatientGender(e.target.value)} style={{ background: "var(--bg)" }}>
+                    <div className="label" style={{ marginBottom: 5 }}>
+                      Gender
+                    </div>
+                    <select
+                      className="input-field"
+                      value={patientGender}
+                      onChange={(e) => setPatientGender(e.target.value)}
+                      style={{ background: "var(--bg)" }}
+                    >
                       <option value="">Select</option>
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
@@ -245,7 +1330,9 @@ export default function ScreenPage() {
                   </div>
                 </div>
                 <div>
-                  <div className="label" style={{ marginBottom: 5 }}>Clinical Notes</div>
+                  <div className="label" style={{ marginBottom: 5 }}>
+                    Clinical Notes
+                  </div>
                   <textarea
                     className="input-field"
                     placeholder="Symptoms, duration, relevant history..."
@@ -258,8 +1345,17 @@ export default function ScreenPage() {
               </div>
             </div>
 
+            {/* Audio sample */}
             <div className="card" style={{ padding: 20 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", marginBottom: 14, letterSpacing: "-0.01em" }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "var(--text-primary)",
+                  marginBottom: 14,
+                  letterSpacing: "-0.01em",
+                }}
+              >
                 Audio Sample
               </div>
 
@@ -274,12 +1370,21 @@ export default function ScreenPage() {
                   transition: "all 0.15s",
                   marginBottom: 12,
                 }}
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={handleDrop}
                 onClick={() => fileRef.current?.click()}
               >
-                <input ref={fileRef} type="file" accept="audio/*" style={{ display: "none" }} onChange={handleFileChange} />
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="audio/*"
+                  style={{ display: "none" }}
+                  onChange={handleFileChange}
+                />
                 {file ? (
                   <div>
                     <div
@@ -294,13 +1399,29 @@ export default function ScreenPage() {
                         margin: "0 auto 10px",
                       }}
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="var(--blue)"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <path d="M9 18V5l12-2v13" />
                         <circle cx="6" cy="18" r="3" />
                         <circle cx="18" cy="16" r="3" />
                       </svg>
                     </div>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)", marginBottom: 2 }}>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: "var(--text-primary)",
+                        marginBottom: 2,
+                      }}
+                    >
                       {file.name}
                     </div>
                     <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
@@ -321,14 +1442,30 @@ export default function ScreenPage() {
                         margin: "0 auto 10px",
                       }}
                     >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="var(--text-tertiary)"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                         <polyline points="17 8 12 3 7 8" />
                         <line x1="12" y1="3" x2="12" y2="15" />
                       </svg>
                     </div>
-                    <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 3 }}>
-                      Drop audio file or <span style={{ color: "var(--blue)", fontWeight: 500 }}>browse</span>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: "var(--text-secondary)",
+                        marginBottom: 3,
+                      }}
+                    >
+                      Drop audio file or{" "}
+                      <span style={{ color: "var(--blue)", fontWeight: 500 }}>browse</span>
                     </div>
                     <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
                       WAV, MP3, OGG, FLAC supported
@@ -348,7 +1485,14 @@ export default function ScreenPage() {
                   }}
                 >
                   <WaveformVisualiser playing={isPlaying} />
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginTop: 8,
+                    }}
+                  >
                     <button
                       onClick={togglePlay}
                       style={{
@@ -362,7 +1506,6 @@ export default function ScreenPage() {
                         alignItems: "center",
                         justifyContent: "center",
                         boxShadow: "0 2px 8px rgba(0,113,227,0.3)",
-                        transition: "transform 0.1s",
                         flexShrink: 0,
                       }}
                     >
@@ -372,12 +1515,20 @@ export default function ScreenPage() {
                           <rect x="7" y="0" width="3" height="12" rx="1" />
                         </svg>
                       ) : (
-                        <svg width="11" height="12" viewBox="0 0 11 12" fill="#fff" style={{ marginLeft: 1 }}>
+                        <svg
+                          width="11"
+                          height="12"
+                          viewBox="0 0 11 12"
+                          fill="#fff"
+                          style={{ marginLeft: 1 }}
+                        >
                           <path d="M0 0L11 6L0 12V0Z" />
                         </svg>
                       )}
                     </button>
-                    <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{file.name}</span>
+                    <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                      {file.name}
+                    </span>
                   </div>
                 </div>
               )}
@@ -406,10 +1557,21 @@ export default function ScreenPage() {
                   style={{ flex: 1 }}
                 >
                   {loading ? (
-                    <><div className="spinner" /> Analysing...</>
+                    <>
+                      <div className="spinner" /> Analysing...
+                    </>
                   ) : (
                     <>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <circle cx="11" cy="11" r="8" />
                         <line x1="21" y1="21" x2="16.65" y2="16.65" />
                       </svg>
@@ -426,9 +1588,11 @@ export default function ScreenPage() {
             </div>
           </div>
 
+          {/* Right — classification result */}
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {result ? (
               <div className="animate-fade-up" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {/* Classification card */}
                 <div
                   className="card"
                   style={{
@@ -453,7 +1617,14 @@ export default function ScreenPage() {
                     </div>
                   )}
 
-                  <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 16,
+                      marginBottom: 20,
+                    }}
+                  >
                     <div style={{ position: "relative", flexShrink: 0 }}>
                       <CircularProgress
                         value={result.confidence}
@@ -470,16 +1641,40 @@ export default function ScreenPage() {
                           justifyContent: "center",
                         }}
                       >
-                        <span style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.04em" }}>
+                        <span
+                          style={{
+                            fontSize: 18,
+                            fontWeight: 700,
+                            color: "var(--text-primary)",
+                            letterSpacing: "-0.04em",
+                          }}
+                        >
                           {(result.confidence * 100).toFixed(0)}%
                         </span>
-                        <span style={{ fontSize: 9, color: "var(--text-tertiary)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                        <span
+                          style={{
+                            fontSize: 9,
+                            color: "var(--text-tertiary)",
+                            fontWeight: 500,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.04em",
+                          }}
+                        >
                           conf.
                         </span>
                       </div>
                     </div>
                     <div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: "var(--text-tertiary)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                          marginBottom: 4,
+                        }}
+                      >
                         Predicted Condition
                       </div>
                       <div
@@ -512,22 +1707,54 @@ export default function ScreenPage() {
                         marginBottom: 18,
                       }}
                     >
-                      <div style={{ fontSize: 13, color: "var(--text-primary)", lineHeight: 1.55, marginBottom: 6 }}>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          color: "var(--text-primary)",
+                          lineHeight: 1.55,
+                          marginBottom: 6,
+                        }}
+                      >
                         {DISEASE_INFO[result.predicted_class].short}
                       </div>
                       <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={CLASS_COLORS[result.predicted_class] || "var(--blue)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                        <svg
+                          width="13"
+                          height="13"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke={CLASS_COLORS[result.predicted_class] || "var(--blue)"}
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          style={{ flexShrink: 0, marginTop: 1 }}
+                        >
                           <polyline points="9 11 12 14 22 4" />
                           <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
                         </svg>
-                        <span style={{ fontSize: 12, color: CLASS_COLORS[result.predicted_class] || "var(--blue)", fontWeight: 500 }}>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: CLASS_COLORS[result.predicted_class] || "var(--blue)",
+                            fontWeight: 500,
+                          }}
+                        >
                           {DISEASE_INFO[result.predicted_class].action}
                         </span>
                       </div>
                     </div>
                   )}
 
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: "var(--text-tertiary)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      marginBottom: 12,
+                    }}
+                  >
                     All Class Probabilities
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -535,8 +1762,17 @@ export default function ScreenPage() {
                       const isTop = cls === result.predicted_class;
                       return (
                         <div key={cls}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: 5,
+                            }}
+                          >
+                            <div
+                              style={{ display: "flex", alignItems: "center", gap: 7 }}
+                            >
                               <div
                                 style={{
                                   width: 8,
@@ -551,7 +1787,9 @@ export default function ScreenPage() {
                                 style={{
                                   fontSize: 13,
                                   fontWeight: isTop ? 600 : 400,
-                                  color: isTop ? "var(--text-primary)" : "var(--text-secondary)",
+                                  color: isTop
+                                    ? "var(--text-primary)"
+                                    : "var(--text-secondary)",
                                 }}
                               >
                                 {cls}
@@ -577,13 +1815,22 @@ export default function ScreenPage() {
                               style={{
                                 fontSize: 12,
                                 fontWeight: isTop ? 600 : 400,
-                                color: isTop ? "var(--text-primary)" : "var(--text-tertiary)",
+                                color: isTop
+                                  ? "var(--text-primary)"
+                                  : "var(--text-tertiary)",
                               }}
                             >
                               {(prob * 100).toFixed(1)}%
                             </span>
                           </div>
-                          <div style={{ height: isTop ? 7 : 5, background: "var(--bg)", borderRadius: 10, overflow: "hidden" }}>
+                          <div
+                            style={{
+                              height: isTop ? 7 : 5,
+                              background: "var(--bg)",
+                              borderRadius: 10,
+                              overflow: "hidden",
+                            }}
+                          >
                             <div
                               style={{
                                 width: `${prob * 100}%`,
@@ -601,6 +1848,7 @@ export default function ScreenPage() {
                   </div>
                 </div>
 
+                {/* Disclaimer */}
                 <div
                   style={{
                     padding: "11px 14px",
@@ -615,111 +1863,62 @@ export default function ScreenPage() {
                     alignItems: "flex-start",
                   }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ flexShrink: 0, marginTop: 1 }}
+                  >
                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
                     <line x1="12" y1="9" x2="12" y2="13" />
                     <line x1="12" y1="17" x2="12.01" y2="17" />
                   </svg>
-                  This tool is for clinical decision support only. Results must be confirmed with physical examination and established diagnostic procedures.
+                  This tool is for clinical decision support only. Results must be
+                  confirmed with physical examination and established diagnostic
+                  procedures.
                 </div>
 
-                {/* Explainability Panel */}
-                <div className="card" style={{ padding: 20 }}>
-                  <div style={{
-                    fontSize: 13, fontWeight: 600, color: "var(--text-primary)",
-                    marginBottom: 14, letterSpacing: "-0.01em",
-                    display: "flex", alignItems: "center", gap: 8,
-                  }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                      stroke="var(--blue)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="8" x2="12" y2="12" />
-                      <line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                    Model Explainability
+                {/* Explainability loading indicator (brief, inside result column) */}
+                {explainLoading && !explain && (
+                  <div
+                    style={{
+                      padding: "14px 16px",
+                      borderRadius: 10,
+                      background: "var(--surface)",
+                      border: "1px solid var(--border)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      fontSize: 12,
+                      color: "var(--text-tertiary)",
+                    }}
+                  >
+                    <div
+                      className="spinner-blue"
+                      style={{ width: 16, height: 16, borderWidth: 2, flexShrink: 0 }}
+                    />
+                    Computing acoustic analysis and attention maps…
                   </div>
-
-                  {explainLoading && (
-                    <div style={{
-                      display: "flex", flexDirection: "column", alignItems: "center",
-                      justifyContent: "center", gap: 10, padding: "28px 0",
-                    }}>
-                      <div className="spinner-blue" style={{ width: 24, height: 24, borderWidth: 3 }} />
-                      <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
-                        Computing spectrogram and GradCAM heatmap...
-                      </div>
-                    </div>
-                  )}
-
-                  {explainError && !explainLoading && (
-                    <div style={{
-                      padding: "10px 13px", borderRadius: 8,
+                )}
+                {explainError && !explainLoading && (
+                  <div
+                    style={{
+                      padding: "10px 13px",
+                      borderRadius: 8,
                       background: "var(--red-light)",
                       border: "1px solid rgba(255,59,48,0.2)",
-                      color: "#c0372b", fontSize: 12,
-                    }}>
-                      {explainError}
-                    </div>
-                  )}
-
-                  {explain && !explainLoading && (
-                    <div>
-                      {explain.demo_mode && (
-                        <div style={{
-                          fontSize: 11, color: "var(--text-tertiary)", marginBottom: 10,
-                          padding: "6px 10px", background: "#f8fafc",
-                          borderRadius: 6, border: "1px solid var(--border)",
-                        }}>
-                          Demo mode — synthetic visualisation shown.
-                        </div>
-                      )}
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                        <div>
-                          <div style={{
-                            fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)",
-                            textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6,
-                          }}>
-                            Mel Spectrogram
-                          </div>
-                          {explain.mel_spectrogram_b64 && (
-                            <img
-                              src={`data:image/png;base64,${explain.mel_spectrogram_b64}`}
-                              alt="Mel spectrogram"
-                              style={{ width: "100%", borderRadius: 8, border: "1px solid var(--border)", display: "block" }}
-                            />
-                          )}
-                        </div>
-                        <div>
-                          <div style={{
-                            fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)",
-                            textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6,
-                          }}>
-                            GradCAM Attention{" "}
-                            <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
-                              — red = high influence
-                            </span>
-                          </div>
-                          {explain.gradcam_b64 && (
-                            <img
-                              src={`data:image/png;base64,${explain.gradcam_b64}`}
-                              alt="GradCAM heatmap"
-                              style={{ width: "100%", borderRadius: 8, border: "1px solid var(--border)", display: "block" }}
-                            />
-                          )}
-                          {!explain.gradcam_b64 && (
-                            <div style={{
-                              padding: "20px 0", textAlign: "center",
-                              fontSize: 12, color: "var(--text-tertiary)",
-                              border: "1px solid var(--border)", borderRadius: 8,
-                            }}>
-                              GradCAM unavailable (demo mode)
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                      color: "#c0372b",
+                      fontSize: 12,
+                    }}
+                  >
+                    {explainError}
+                  </div>
+                )}
               </div>
             ) : (
               <div
@@ -735,10 +1934,30 @@ export default function ScreenPage() {
                 }}
               >
                 {loading ? (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
-                    <div className="spinner-blue" style={{ width: 32, height: 32, borderWidth: 3 }} />
-                    <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>Analysing audio...</div>
-                    <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>Extracting mel-spectrogram features and running inference</div>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: 14,
+                    }}
+                  >
+                    <div
+                      className="spinner-blue"
+                      style={{ width: 32, height: 32, borderWidth: 3 }}
+                    />
+                    <div
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 500,
+                        color: "var(--text-primary)",
+                      }}
+                    >
+                      Analysing audio...
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+                      Extracting mel-spectrogram features and running inference
+                    </div>
                   </div>
                 ) : (
                   <div>
@@ -754,11 +1973,27 @@ export default function ScreenPage() {
                         margin: "0 auto 14px",
                       }}
                     >
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <svg
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="var(--text-tertiary)"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                       </svg>
                     </div>
-                    <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 5 }}>
+                    <div
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 500,
+                        color: "var(--text-secondary)",
+                        marginBottom: 5,
+                      }}
+                    >
                       Results will appear here
                     </div>
                     <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
@@ -770,6 +2005,103 @@ export default function ScreenPage() {
             )}
           </div>
         </div>
+
+        {/* ── Full-width AI Analysis Dashboard ── */}
+        {result && explain && (
+          <div className="animate-fade-up" style={{ marginTop: 24 }}>
+            {/* Section divider */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                marginBottom: 18,
+              }}
+            >
+              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 7,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "var(--text-tertiary)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                </svg>
+                AI Analysis Dashboard
+                {explain.demo_mode && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      background: "var(--bg)",
+                      border: "1px solid var(--border)",
+                      padding: "1px 7px",
+                      borderRadius: 8,
+                      color: "var(--text-tertiary)",
+                      textTransform: "none",
+                      letterSpacing: 0,
+                    }}
+                  >
+                    demo mode
+                  </span>
+                )}
+              </div>
+              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {/* Row 1 — Processing pipeline */}
+              <PipelineStepper steps={explain.processing_pipeline} />
+
+              {/* Row 2 — Acoustic analytics (3 columns) */}
+              <div
+                style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}
+              >
+                <FrequencyBandChart data={explain.acoustic_features.freq_band_energy} />
+                <MFCCChart
+                  values={explain.acoustic_features.mfcc_means}
+                  classColor={CLASS_COLORS[result.predicted_class] || "var(--blue)"}
+                />
+                <SpectralMetricsCard
+                  features={explain.acoustic_features}
+                  uncertainty={explain.model_uncertainty}
+                />
+              </div>
+
+              {/* Row 3 — Visual analysis (mel + gradcam) */}
+              <VisualAnalysisPanel
+                melB64={explain.mel_spectrogram_b64}
+                gradcamB64={explain.gradcam_b64}
+                demoMode={explain.demo_mode}
+              />
+
+              {/* Row 4 — RMS energy envelope */}
+              <RMSEnvelopeChart envelope={explain.acoustic_features.rms_envelope} />
+
+              {/* Row 5 — Clinical interpretation */}
+              <ClinicalInterpretation
+                result={result}
+                uncertainty={explain.model_uncertainty}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );

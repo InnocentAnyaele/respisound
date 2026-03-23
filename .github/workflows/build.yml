@@ -24,12 +24,28 @@ jobs:
         uses: actions/checkout@v4
 
       # ── Python / backend ──────────────────────────────────────────────────
+      - name: Free disk space (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/.ghcup /usr/share/swift /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force || true
+          df -h
+
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install backend dependencies
+      - name: Install backend dependencies (Linux — CPU-only torch)
+        if: runner.os == 'Linux'
+        working-directory: backend
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+
+      - name: Install backend dependencies (Windows)
+        if: runner.os == 'Windows'
         working-directory: backend
         run: pip install -r requirements.txt
 

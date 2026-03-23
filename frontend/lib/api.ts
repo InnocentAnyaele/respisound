@@ -47,11 +47,37 @@ export interface Stats {
   recent_screenings: number;
 }
 
+export interface AcousticFeatures {
+  freq_band_energy: Record<string, number>;
+  mfcc_means: number[];
+  rms_envelope: number[];
+  spectral_centroid_mean: number;
+  spectral_bandwidth_mean: number;
+  zero_crossing_rate_mean: number;
+  duration_s: number;
+  sample_rate: number;
+}
+
+export interface ProcessingStep {
+  step: string;
+  detail: string;
+  value: string;
+}
+
+export interface ModelUncertainty {
+  entropy: number;
+  margin: number;
+  confidence_tier: string;
+}
+
 export interface ExplainResponse {
   screening_id: string;
   mel_spectrogram_b64: string;
   gradcam_b64: string;
   demo_mode: boolean;
+  acoustic_features: AcousticFeatures;
+  processing_pipeline: ProcessingStep[];
+  model_uncertainty: ModelUncertainty;
 }
 
 export const api = {
