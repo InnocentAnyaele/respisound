@@ -1,10 +1,8 @@
 import sys
 from pathlib import Path
 
-# Resolve the icon path relative to this spec file so it works
-# regardless of which directory PyInstaller is invoked from.
-SPEC_DIR = Path(__file__).parent.resolve()
-ICON_PATH = str(SPEC_DIR / '../tauri-app/src-tauri/icons/icon.ico')
+# SPECPATH is provided by PyInstaller — the directory containing this spec file.
+ICON_PATH = str(Path(SPECPATH) / '../tauri-app/src-tauri/icons/icon.ico')
 
 block_cipher = None
 
@@ -51,12 +49,17 @@ a = Analysis(
         'scipy',
         'scipy.fft',
         'scipy.fftpack',
+        'matplotlib',
+        'matplotlib.pyplot',
+        'matplotlib.backends.backend_agg',
+        'matplotlib.figure',
+        'matplotlib.colors',
+        'matplotlib._cm_listed',
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        'matplotlib',
         'tkinter',
         'IPython',
         'jupyter',

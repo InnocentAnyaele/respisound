@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import Layout from "../components/Layout";
-import { api, Screening, Patient } from "../lib/api";
+import { api, Screening, Patient, ExplainResponse } from "../lib/api";
 
 const CLASS_COLORS: Record<string, string> = {
   COPD: "#ff3b30",
@@ -118,6 +118,9 @@ export default function ScreenPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<Screening | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [explain, setExplain] = useState<ExplainResponse | null>(null);
+  const [explainLoading, setExplainLoading] = useState(false);
+  const [explainError, setExplainError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -175,6 +178,14 @@ export default function ScreenPage() {
       if (notes.trim()) fd.append("notes", notes.trim());
       const s = await api.screenAudio(fd);
       setResult(s);
+      // Fire-and-forget — does not block showing the prediction
+      setExplainLoading(true);
+      setExplain(null);
+      setExplainError(null);
+      api.explainScreening(s.id)
+        .then((exp) => setExplain(exp))
+        .catch((err: any) => setExplainError(err.message || "Could not load explainability data."))
+        .finally(() => setExplainLoading(false));
     } catch (err: any) {
       setError(err.message || "Screening failed. Please try again.");
     } finally {
@@ -185,6 +196,7 @@ export default function ScreenPage() {
   const reset = () => {
     setFile(null); setAudioUrl(null); setResult(null); setError(null);
     setPatientName(""); setPatientAge(""); setPatientGender(""); setNotes("");
+    setExplain(null); setExplainLoading(false); setExplainError(null);
     setIsPlaying(false);
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     if (fileRef.current) fileRef.current.value = "";
@@ -609,6 +621,104 @@ export default function ScreenPage() {
                     <line x1="12" y1="17" x2="12.01" y2="17" />
                   </svg>
                   This tool is for clinical decision support only. Results must be confirmed with physical examination and established diagnostic procedures.
+                </div>
+
+                {/* Explainability Panel */}
+                <div className="card" style={{ padding: 20 }}>
+                  <div style={{
+                    fontSize: 13, fontWeight: 600, color: "var(--text-primary)",
+                    marginBottom: 14, letterSpacing: "-0.01em",
+                    display: "flex", alignItems: "center", gap: 8,
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                      stroke="var(--blue)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    Model Explainability
+                  </div>
+
+                  {explainLoading && (
+                    <div style={{
+                      display: "flex", flexDirection: "column", alignItems: "center",
+                      justifyContent: "center", gap: 10, padding: "28px 0",
+                    }}>
+                      <div className="spinner-blue" style={{ width: 24, height: 24, borderWidth: 3 }} />
+                      <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+                        Computing spectrogram and GradCAM heatmap...
+                      </div>
+                    </div>
+                  )}
+
+                  {explainError && !explainLoading && (
+                    <div style={{
+                      padding: "10px 13px", borderRadius: 8,
+                      background: "var(--red-light)",
+                      border: "1px solid rgba(255,59,48,0.2)",
+                      color: "#c0372b", fontSize: 12,
+                    }}>
+                      {explainError}
+                    </div>
+                  )}
+
+                  {explain && !explainLoading && (
+                    <div>
+                      {explain.demo_mode && (
+                        <div style={{
+                          fontSize: 11, color: "var(--text-tertiary)", marginBottom: 10,
+                          padding: "6px 10px", background: "#f8fafc",
+                          borderRadius: 6, border: "1px solid var(--border)",
+                        }}>
+                          Demo mode — synthetic visualisation shown.
+                        </div>
+                      )}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                        <div>
+                          <div style={{
+                            fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)",
+                            textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6,
+                          }}>
+                            Mel Spectrogram
+                          </div>
+                          {explain.mel_spectrogram_b64 && (
+                            <img
+                              src={`data:image/png;base64,${explain.mel_spectrogram_b64}`}
+                              alt="Mel spectrogram"
+                              style={{ width: "100%", borderRadius: 8, border: "1px solid var(--border)", display: "block" }}
+                            />
+                          )}
+                        </div>
+                        <div>
+                          <div style={{
+                            fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)",
+                            textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6,
+                          }}>
+                            GradCAM Attention{" "}
+                            <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+                              — red = high influence
+                            </span>
+                          </div>
+                          {explain.gradcam_b64 && (
+                            <img
+                              src={`data:image/png;base64,${explain.gradcam_b64}`}
+                              alt="GradCAM heatmap"
+                              style={{ width: "100%", borderRadius: 8, border: "1px solid var(--border)", display: "block" }}
+                            />
+                          )}
+                          {!explain.gradcam_b64 && (
+                            <div style={{
+                              padding: "20px 0", textAlign: "center",
+                              fontSize: 12, color: "var(--text-tertiary)",
+                              border: "1px solid var(--border)", borderRadius: 8,
+                            }}>
+                              GradCAM unavailable (demo mode)
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (

@@ -1,7 +1,13 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+function getBase(): string {
+  if (typeof window !== "undefined") {
+    const stored = window.sessionStorage.getItem("__RESPISOUND_API_URL__");
+    if (stored) return stored;
+  }
+  return process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(`${getBase()}${path}`, {
     ...options,
     headers: {
       ...(options?.headers || {}),
@@ -41,6 +47,13 @@ export interface Stats {
   recent_screenings: number;
 }
 
+export interface ExplainResponse {
+  screening_id: string;
+  mel_spectrogram_b64: string;
+  gradcam_b64: string;
+  demo_mode: boolean;
+}
+
 export const api = {
   health: () => request<{ status: string; model_loaded: boolean }>("/health"),
 
@@ -67,4 +80,7 @@ export const api = {
     request<Screening[]>(patientId ? `/screenings?patient_id=${patientId}` : "/screenings"),
 
   getScreening: (id: string) => request<Screening>(`/screenings/${id}`),
+
+  explainScreening: (screeningId: string) =>
+    request<ExplainResponse>(`/explain/${screeningId}`),
 };

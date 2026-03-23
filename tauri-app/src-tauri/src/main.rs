@@ -76,10 +76,9 @@ fn main() {
                 let ready = wait_for_api(port, 30);
                 if ready {
                     if let Some(window) = handle.get_webview_window("main") {
-                        let url = format!("http://127.0.0.1:{}", port);
                         let _ = window.eval(&format!(
-                            "window.__RESPISOUND_API_URL__ = '{}'; window.location.reload();",
-                            url
+                            "sessionStorage.setItem('__RESPISOUND_API_URL__','http://127.0.0.1:{}'); window.location.reload();",
+                            port
                         ));
                     }
                 }

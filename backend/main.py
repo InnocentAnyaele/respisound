@@ -1,7 +1,9 @@
 import os
 import sys
+import io
 import uuid
 import json
+import base64
 import shutil
 import logging
 import sqlite3
@@ -168,6 +170,98 @@ def run_inference(audio_path: str):
     }
 
 
+def generate_mel_png(audio_path: str) -> str:
+    """Return the log-mel spectrogram as a base64 PNG (magma colormap)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    features = extract_features(audio_path)      # (1, 1, 128, T)
+    mel_np = features.squeeze().numpy()           # (128, T)
+
+    fig, ax = plt.subplots(figsize=(4, 2.5), dpi=100)
+    ax.imshow(mel_np, aspect="auto", origin="lower", cmap="magma")
+    ax.axis("off")
+    fig.tight_layout(pad=0)
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", pad_inches=0)
+    plt.close(fig)
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode("utf-8")
+
+
+def compute_gradcam(audio_path: str) -> str:
+    """
+    GradCAM on model.cnn[4] (the second Conv2d, 32→64 channels).
+    Returns a base64 PNG: greyscale spectrogram + jet heatmap overlay.
+    Returns empty string if model is None.
+    """
+    if model is None:
+        return ""
+
+    import torch
+    import torch.nn.functional as F
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    features = extract_features(audio_path)    # (1, 1, 128, T)
+
+    activation: dict = {}
+    gradient: dict = {}
+
+    def fwd_hook(module, inp, out):
+        activation["A"] = out
+
+    def bwd_hook(module, grad_in, grad_out):
+        gradient["dA"] = grad_out[0]
+
+    target_layer = model.cnn[4]
+    fh = target_layer.register_forward_hook(fwd_hook)
+    bh = target_layer.register_full_backward_hook(bwd_hook)
+
+    try:
+        model.eval()
+        inp = features.detach().requires_grad_(True)
+        logits = model(inp)                        # (1, num_classes)
+        pred_idx = int(logits.argmax(dim=1).item())
+        model.zero_grad()
+        logits[0, pred_idx].backward()
+    finally:
+        fh.remove()
+        bh.remove()
+
+    A = activation["A"].detach()                   # (1, 64, H, W)
+    dA = gradient["dA"].detach()                   # (1, 64, H, W)
+
+    alpha = dA.mean(dim=(2, 3), keepdim=True)      # (1, 64, 1, 1)
+    cam = F.relu((alpha * A).sum(dim=1, keepdim=True))  # (1, 1, H, W)
+
+    cam_up = F.interpolate(
+        cam, size=(features.shape[2], features.shape[3]),
+        mode="bilinear", align_corners=False,
+    ).squeeze().numpy()                            # (128, T)
+
+    cam_max = cam_up.max()
+    if cam_max > 1e-8:
+        cam_up = cam_up / cam_max
+
+    mel_np = features.detach().squeeze().numpy()   # (128, T)
+    mel_min, mel_max = mel_np.min(), mel_np.max()
+    mel_norm = (mel_np - mel_min) / (mel_max - mel_min + 1e-8)
+
+    fig, ax = plt.subplots(figsize=(4, 2.5), dpi=100)
+    ax.imshow(mel_norm, aspect="auto", origin="lower", cmap="Greys_r")
+    ax.imshow(cam_up,   aspect="auto", origin="lower", cmap="jet", alpha=0.5)
+    ax.axis("off")
+    fig.tight_layout(pad=0)
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", pad_inches=0)
+    plt.close(fig)
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode("utf-8")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
@@ -210,6 +304,13 @@ class ScreeningResponse(BaseModel):
     notes: Optional[str]
     created_at: str
     demo_mode: Optional[bool] = False
+
+
+class ExplainResponse(BaseModel):
+    screening_id: str
+    mel_spectrogram_b64: str
+    gradcam_b64: str
+    demo_mode: bool
 
 
 @app.get("/health")
@@ -365,6 +466,50 @@ def get_screening(screening_id: str):
         return ScreeningResponse(**d)
     finally:
         conn.close()
+
+
+@app.get("/explain/{screening_id}", response_model=ExplainResponse)
+def explain_screening(screening_id: str):
+    """
+    Called fire-and-forget from the frontend after prediction returns.
+    Generates mel spectrogram + GradCAM images for the stored screening.
+    Runs synchronously so PyTorch backward() stays off the event loop.
+    """
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT audio_filename FROM screenings WHERE id = ?", (screening_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Screening not found")
+        audio_filename = row["audio_filename"]
+    finally:
+        conn.close()
+
+    audio_path = str(UPLOADS_DIR / audio_filename)
+    if not Path(audio_path).exists():
+        raise HTTPException(status_code=404, detail="Audio file not found on server")
+
+    is_demo = model is None
+
+    try:
+        mel_b64 = generate_mel_png(audio_path)
+    except Exception as e:
+        logger.error("mel PNG generation failed: %s", str(e))
+        mel_b64 = ""
+
+    try:
+        gradcam_b64 = compute_gradcam(audio_path)
+    except Exception as e:
+        logger.error("GradCAM failed: %s", str(e))
+        gradcam_b64 = ""
+
+    return ExplainResponse(
+        screening_id=screening_id,
+        mel_spectrogram_b64=mel_b64,
+        gradcam_b64=gradcam_b64,
+        demo_mode=is_demo,
+    )
 
 
 @app.get("/stats")
