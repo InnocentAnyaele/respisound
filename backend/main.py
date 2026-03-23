@@ -459,8 +459,21 @@ async def screen_audio(
     patient_id: Optional[str] = Form(None),
     notes: Optional[str] = Form(None)
 ):
-    allowed_types = ["audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp3", "audio/ogg", "audio/flac"]
-    if audio.content_type and audio.content_type not in allowed_types:
+    # Browsers and WebKit (Tauri on Linux/macOS) use varying MIME types for the same
+    # container format — e.g. audio/wave, audio/vnd.wave, audio/x-wav all mean WAV.
+    # Fall back to file extension when the content-type is ambiguous or generic.
+    _ALLOWED_TYPES = {
+        "audio/wav", "audio/x-wav", "audio/wave", "audio/vnd.wave", "audio/x-pn-wav",
+        "audio/mpeg", "audio/mp3", "audio/x-mp3", "audio/x-mpeg",
+        "audio/ogg", "audio/vorbis", "video/ogg", "application/ogg",
+        "audio/flac", "audio/x-flac",
+        "audio/mp4", "audio/x-m4a", "audio/aac",
+        "application/octet-stream",  # generic binary — extension check covers this
+    }
+    _ALLOWED_EXT = {".wav", ".mp3", ".ogg", ".flac", ".m4a", ".aac"}
+    ct = (audio.content_type or "").lower().split(";")[0].strip()
+    ext = Path(audio.filename or "").suffix.lower()
+    if ct and ct not in _ALLOWED_TYPES and ext not in _ALLOWED_EXT:
         raise HTTPException(status_code=400, detail="Unsupported audio format. Use WAV, MP3, OGG, or FLAC.")
 
     file_ext = Path(audio.filename).suffix if audio.filename else ".wav"
