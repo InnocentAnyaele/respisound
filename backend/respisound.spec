@@ -1,6 +1,11 @@
 import sys
 from pathlib import Path
 
+# Resolve the icon path relative to this spec file so it works
+# regardless of which directory PyInstaller is invoked from.
+SPEC_DIR = Path(__file__).parent.resolve()
+ICON_PATH = str(SPEC_DIR / '../tauri-app/src-tauri/icons/icon.ico')
+
 block_cipher = None
 
 a = Analysis(
@@ -80,7 +85,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='../tauri-app/icons/icon.ico',
+    icon=ICON_PATH,
 )
 
 coll = COLLECT(
