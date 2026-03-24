@@ -1,5 +1,41 @@
 import os
 import sys
+from pathlib import Path
+
+# ── Frozen-app bootstrap — MUST run before any third-party imports ────────────
+#
+# When PyInstaller bundles with console=False, sys.stdout and sys.stderr start
+# as None.  Any library that tries to write to them during *import* (numpy
+# deprecation warnings, uvicorn log handler setup, …) raises AttributeError and
+# crashes the process before the old null-check further down could ever run.
+#
+# Fix: resolve paths, create the data directory, and redirect stdout/stderr to
+# a real log file HERE — before numpy, fastapi, or anything else is imported.
+# The log file lets us diagnose startup crashes on end-user machines.
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys.executable).parent
+    _MEIPASS = Path(getattr(sys, "_MEIPASS", BASE_DIR / "_internal"))
+    if sys.platform == "win32":
+        _app_data = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+    else:
+        _app_data = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    DATA_DIR = _app_data / "respisound"
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _log_fh = open(str(DATA_DIR / "backend.log"), "w", buffering=1, encoding="utf-8")
+    sys.stdout = _log_fh
+    sys.stderr = _log_fh
+    print(
+        f"[RespiSound] backend starting — platform={sys.platform} "
+        f"port={os.environ.get('RESPISOUND_PORT', '?')} "
+        f"meipass={_MEIPASS}",
+        flush=True,
+    )
+else:
+    BASE_DIR = Path(__file__).parent
+    _MEIPASS = BASE_DIR
+    DATA_DIR = BASE_DIR
+
+# ── Standard-library and third-party imports (stdout/stderr now safe) ─────────
 import io
 import uuid
 import json
@@ -9,7 +45,6 @@ import logging
 import sqlite3
 import datetime
 import numpy as np
-from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
@@ -18,34 +53,8 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from typing import Optional, List
 
-
-# When bundled as a windowed executable (console=False), stdout/stderr are None.
-# Redirect them to devnull so uvicorn's logging formatter doesn't crash on isatty().
-if sys.stdout is None:
-    sys.stdout = open(os.devnull, "w")
-if sys.stderr is None:
-    sys.stderr = open(os.devnull, "w")
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-if getattr(sys, "frozen", False):
-    # Executable directory (read-only in packaged .deb / AppImage)
-    BASE_DIR = Path(sys.executable).parent
-    # PyInstaller 6.x places bundled data files inside _internal/ and exposes
-    # the path via sys._MEIPASS. Fall back to BASE_DIR for older builds.
-    _MEIPASS = Path(getattr(sys, "_MEIPASS", BASE_DIR / "_internal"))
-    # Writable user-data directory for database and uploads.
-    # On Windows use %LOCALAPPDATA%; on Unix follow XDG_DATA_HOME.
-    if sys.platform == "win32":
-        _app_data = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-    else:
-        _app_data = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    DATA_DIR = _app_data / "respisound"
-else:
-    BASE_DIR = Path(__file__).parent
-    _MEIPASS = BASE_DIR
-    DATA_DIR = BASE_DIR
 
 DB_PATH = DATA_DIR / "respisound.db"
 UPLOADS_DIR = DATA_DIR / "uploads"

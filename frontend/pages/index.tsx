@@ -48,6 +48,7 @@ export default function Dashboard() {
   const [recent, setRecent] = useState<Screening[]>([]);
   const [apiOk, setApiOk] = useState(false);
   const [apiStarting, setApiStarting] = useState(true);
+  const [apiFailedLogDir, setApiFailedLogDir] = useState<string | null>(null);
   const [modelLoaded, setModelLoaded] = useState(false);
 
   useEffect(() => {
@@ -79,7 +80,13 @@ export default function Dashboard() {
 
     // Also listen for the explicit failure event dispatched by the Tauri shell
     // when the backend sidecar never became ready.
-    const onApiFailed = () => { if (!cancelled) setApiStarting(false); };
+    const onApiFailed = (e: Event) => {
+      if (!cancelled) {
+        setApiStarting(false);
+        const dir = (e as CustomEvent<string>).detail || null;
+        if (dir) setApiFailedLogDir(dir);
+      }
+    };
     document.addEventListener("respisound:api-failed", onApiFailed);
 
     return () => {
@@ -125,6 +132,11 @@ export default function Dashboard() {
               <StatusDot ok={apiOk} />
               {apiOk ? "API Online" : apiStarting ? "API Starting…" : "API Offline"}
             </div>
+            {!apiOk && !apiStarting && apiFailedLogDir && (
+              <div style={{ fontSize: 11, color: "#c0392b", maxWidth: 420 }}>
+                Backend failed to start. Check logs at: <code>{apiFailedLogDir}</code>
+              </div>
+            )}
             <div
               style={{
                 display: "flex",

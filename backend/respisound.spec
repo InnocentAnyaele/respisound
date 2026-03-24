@@ -101,7 +101,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,          # UPX triggers Windows Defender heuristics — keep off
     console=False,
     disable_windowed_traceback=False,
     target_arch=None,
@@ -116,7 +116,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,          # UPX triggers Windows Defender heuristics — keep off
     upx_exclude=[],
     name='respisound-api',
 )
