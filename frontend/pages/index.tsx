@@ -48,12 +48,13 @@ export default function Dashboard() {
   const [recent, setRecent] = useState<Screening[]>([]);
   const [apiOk, setApiOk] = useState(false);
   const [apiStarting, setApiStarting] = useState(true);
-  const [apiFailedLogDir, setApiFailedLogDir] = useState<string | null>(null);
   const [modelLoaded, setModelLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 80; // 80 × 3 s = 4 minutes
 
     const loadData = () => {
       api.getStats().then((s) => { if (!cancelled) setStats(s); }).catch(() => {});
@@ -61,6 +62,7 @@ export default function Dashboard() {
     };
 
     const checkHealth = () => {
+      attempts++;
       api.health()
         .then((h) => {
           if (cancelled) return;
@@ -71,28 +73,19 @@ export default function Dashboard() {
         })
         .catch(() => {
           if (cancelled) return;
-          // Keep retrying every 3 s while the backend is still starting up.
+          if (attempts >= MAX_ATTEMPTS) {
+            setApiStarting(false); // give up → show "API Offline"
+            return;
+          }
           timer = setTimeout(checkHealth, 3000);
         });
     };
 
     checkHealth();
 
-    // Also listen for the explicit failure event dispatched by the Tauri shell
-    // when the backend sidecar never became ready.
-    const onApiFailed = (e: Event) => {
-      if (!cancelled) {
-        setApiStarting(false);
-        const dir = (e as CustomEvent<string>).detail || null;
-        if (dir) setApiFailedLogDir(dir);
-      }
-    };
-    document.addEventListener("respisound:api-failed", onApiFailed);
-
     return () => {
       cancelled = true;
       clearTimeout(timer);
-      document.removeEventListener("respisound:api-failed", onApiFailed);
     };
   }, []);
 
@@ -132,11 +125,6 @@ export default function Dashboard() {
               <StatusDot ok={apiOk} />
               {apiOk ? "API Online" : apiStarting ? "API Starting…" : "API Offline"}
             </div>
-            {!apiOk && !apiStarting && apiFailedLogDir && (
-              <div style={{ fontSize: 11, color: "#c0392b", maxWidth: 420 }}>
-                Backend failed to start. Check logs at: <code>{apiFailedLogDir}</code>
-              </div>
-            )}
             <div
               style={{
                 display: "flex",

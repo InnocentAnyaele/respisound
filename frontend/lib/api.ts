@@ -1,9 +1,5 @@
 export function getBase(): string {
-  if (typeof window !== "undefined") {
-    const stored = window.sessionStorage.getItem("__RESPISOUND_API_URL__");
-    if (stored) return stored;
-  }
-  return process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  return process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:17531";
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {

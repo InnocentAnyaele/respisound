@@ -1124,11 +1124,18 @@ export default function ScreenPage() {
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 80;
 
     const checkHealth = () => {
+      attempts++;
       api.health()
         .then(() => { if (!cancelled) setApiReady(true); })
-        .catch(() => { if (!cancelled) timer = setTimeout(checkHealth, 3000); });
+        .catch(() => {
+          if (cancelled) return;
+          if (attempts < MAX_ATTEMPTS) timer = setTimeout(checkHealth, 3000);
+          // else: silently give up — button stays disabled showing "API Starting…"
+        });
     };
     checkHealth();
 
