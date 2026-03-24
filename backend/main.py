@@ -18,6 +18,14 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from typing import Optional, List
 
+
+# When bundled as a windowed executable (console=False), stdout/stderr are None.
+# Redirect them to devnull so uvicorn's logging formatter doesn't crash on isatty().
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w")
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -734,4 +742,4 @@ def get_stats():
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("RESPISOUND_PORT", 8000))
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info", log_config=None)
