@@ -1117,11 +1117,24 @@ export default function ScreenPage() {
   const [explain, setExplain] = useState<ExplainResponse | null>(null);
   const [explainLoading, setExplainLoading] = useState(false);
   const [explainError, setExplainError] = useState<string | null>(null);
+  const [apiReady, setApiReady] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const checkHealth = () => {
+      api.health()
+        .then(() => { if (!cancelled) setApiReady(true); })
+        .catch(() => { if (!cancelled) timer = setTimeout(checkHealth, 3000); });
+    };
+    checkHealth();
+
     return () => {
+      cancelled = true;
+      clearTimeout(timer);
       if (audioRef.current) audioRef.current.pause();
     };
   }, []);
@@ -1545,12 +1558,16 @@ export default function ScreenPage() {
                 <button
                   className="btn-primary"
                   onClick={handleSubmit}
-                  disabled={!file || loading}
+                  disabled={!file || loading || !apiReady}
                   style={{ flex: 1 }}
                 >
                   {loading ? (
                     <>
                       <div className="spinner" /> Analysing...
+                    </>
+                  ) : !apiReady ? (
+                    <>
+                      <div className="spinner" /> API Starting…
                     </>
                   ) : (
                     <>

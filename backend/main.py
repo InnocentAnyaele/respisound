@@ -35,9 +35,13 @@ if getattr(sys, "frozen", False):
     # PyInstaller 6.x places bundled data files inside _internal/ and exposes
     # the path via sys._MEIPASS. Fall back to BASE_DIR for older builds.
     _MEIPASS = Path(getattr(sys, "_MEIPASS", BASE_DIR / "_internal"))
-    # Writable user-data directory for database and uploads
-    _xdg_data = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    DATA_DIR = _xdg_data / "respisound"
+    # Writable user-data directory for database and uploads.
+    # On Windows use %LOCALAPPDATA%; on Unix follow XDG_DATA_HOME.
+    if sys.platform == "win32":
+        _app_data = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+    else:
+        _app_data = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    DATA_DIR = _app_data / "respisound"
 else:
     BASE_DIR = Path(__file__).parent
     _MEIPASS = BASE_DIR

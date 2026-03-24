@@ -44,10 +44,12 @@ jobs:
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
 
-      - name: Install backend dependencies (Windows)
+      - name: Install backend dependencies (Windows — CPU-only torch)
         if: runner.os == 'Windows'
         working-directory: backend
-        run: pip install -r requirements.txt
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
 
       - name: Build Python backend with PyInstaller
         working-directory: backend

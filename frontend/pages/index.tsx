@@ -47,12 +47,46 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [recent, setRecent] = useState<Screening[]>([]);
   const [apiOk, setApiOk] = useState(false);
+  const [apiStarting, setApiStarting] = useState(true);
   const [modelLoaded, setModelLoaded] = useState(false);
 
   useEffect(() => {
-    api.health().then((h) => { setApiOk(true); setModelLoaded(h.model_loaded); }).catch(() => {});
-    api.getStats().then(setStats).catch(() => {});
-    api.listScreenings().then((s) => setRecent(s.slice(0, 8))).catch(() => {});
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const loadData = () => {
+      api.getStats().then((s) => { if (!cancelled) setStats(s); }).catch(() => {});
+      api.listScreenings().then((s) => { if (!cancelled) setRecent(s.slice(0, 8)); }).catch(() => {});
+    };
+
+    const checkHealth = () => {
+      api.health()
+        .then((h) => {
+          if (cancelled) return;
+          setApiOk(true);
+          setApiStarting(false);
+          setModelLoaded(h.model_loaded);
+          loadData();
+        })
+        .catch(() => {
+          if (cancelled) return;
+          // Keep retrying every 3 s while the backend is still starting up.
+          timer = setTimeout(checkHealth, 3000);
+        });
+    };
+
+    checkHealth();
+
+    // Also listen for the explicit failure event dispatched by the Tauri shell
+    // when the backend sidecar never became ready.
+    const onApiFailed = () => { if (!cancelled) setApiStarting(false); };
+    document.addEventListener("respisound:api-failed", onApiFailed);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      document.removeEventListener("respisound:api-failed", onApiFailed);
+    };
   }, []);
 
   const chartData = stats
@@ -89,7 +123,7 @@ export default function Dashboard() {
               }}
             >
               <StatusDot ok={apiOk} />
-              {apiOk ? "API Online" : "API Offline"}
+              {apiOk ? "API Online" : apiStarting ? "API Starting…" : "API Offline"}
             </div>
             <div
               style={{
