@@ -24,16 +24,20 @@ logger = logging.getLogger(__name__)
 if getattr(sys, "frozen", False):
     # Executable directory (read-only in packaged .deb / AppImage)
     BASE_DIR = Path(sys.executable).parent
+    # PyInstaller 6.x places bundled data files inside _internal/ and exposes
+    # the path via sys._MEIPASS. Fall back to BASE_DIR for older builds.
+    _MEIPASS = Path(getattr(sys, "_MEIPASS", BASE_DIR / "_internal"))
     # Writable user-data directory for database and uploads
     _xdg_data = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
     DATA_DIR = _xdg_data / "respisound"
 else:
     BASE_DIR = Path(__file__).parent
+    _MEIPASS = BASE_DIR
     DATA_DIR = BASE_DIR
 
 DB_PATH = DATA_DIR / "respisound.db"
 UPLOADS_DIR = DATA_DIR / "uploads"
-MODEL_PATH = BASE_DIR / "model" / "respisound_model.pt"
+MODEL_PATH = _MEIPASS / "model" / "respisound_model.pt"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
