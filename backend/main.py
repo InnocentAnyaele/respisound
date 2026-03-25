@@ -387,7 +387,13 @@ app = FastAPI(title="RespiSound API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:1420", "tauri://localhost", "https://tauri.localhost"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:1420",
+        "tauri://localhost",          # macOS / Linux Tauri
+        "https://tauri.localhost",
+        "http://tauri.localhost",     # Windows WebView2 Tauri
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
