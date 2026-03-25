@@ -1,165 +1,371 @@
 # RespiSound — Desktop Clinical Screening Platform
 
-A respiratory disease screening tool that analyses cough audio samples and classifies them into five categories: Asthma, Bronchitis, COPD, Healthy, and Pneumonia (model output order). Built as a standalone desktop application for clinical use in low-resource settings where internet access cannot be guaranteed.
+A respiratory disease screening tool that analyses cough audio samples and classifies them into five categories: Asthma, Bronchitis, COPD, Healthy, and Pneumonia. Built as a standalone desktop application for clinical use in low-resource settings where internet access cannot be guaranteed.
 
 ---
 
-## Architecture
+## Table of Contents
 
-```
-respisound/
-├── backend/                  FastAPI inference server
-│   ├── main.py               REST API, SQLite persistence, inference pipeline
-│   ├── model_definition.py   CRNN architecture definition
-│   ├── requirements.txt
-│   └── respisound.spec       PyInstaller bundle spec
-│
-├── frontend/                 Next.js static web UI
-│   ├── pages/
-│   │   ├── index.tsx         Clinical dashboard with charts
-│   │   ├── screen.tsx        Audio upload + real-time results
-│   │   ├── patients.tsx      Patient registry
-│   │   └── history.tsx       Filterable screening history
-│   ├── components/
-│   │   └── Layout.tsx        Sidebar navigation shell
-│   ├── lib/
-│   │   └── api.ts            Typed API client
-│   └── styles/globals.css    Design tokens and base styles
-│
-├── tauri-app/                Desktop wrapper
-│   ├── src-tauri/
-│   │   ├── src/main.rs       Spawns backend sidecar, manages lifecycle
-│   │   ├── Cargo.toml
-│   │   ├── build.rs
-│   │   └── tauri.conf.json   Bundle config, window settings, CSP
-│   └── package.json
-│
-└── scripts/
-    ├── dev.sh                Development runner (Unix)
-    ├── build_backend.sh      Build + stage sidecar (Unix)
-    └── build_backend.bat     Build + stage sidecar (Windows)
-```
-
-### How the pieces connect
-
-At runtime, Tauri launches the bundled `respisound-api` executable (the PyInstaller output) as a child process on a randomly assigned local port. The Next.js static build is served directly by Tauri's built-in webview. The frontend's `api.ts` targets `http://127.0.0.1:<port>`, which the Rust core injects into the window via `window.__RESPISOUND_API_URL__`. When the app window closes, Rust kills the child process cleanly.
-
-Data is persisted locally in `respisound.db` (SQLite), stored alongside the executable. Uploaded audio files are retained in an `uploads/` folder in the same directory.
+- [How It Works](#how-it-works)
+- [End User Installation](#end-user-installation)
+- [Development Setup — Windows](#development-setup--windows)
+- [Development Setup — Ubuntu](#development-setup--ubuntu)
+- [Building the Desktop App — Windows](#building-the-desktop-app--windows)
+- [Building the Desktop App — Ubuntu](#building-the-desktop-app--ubuntu)
+- [Plugging In the Trained Model](#plugging-in-the-trained-model)
+- [Demo Mode](#demo-mode)
+- [API Reference](#api-reference)
+- [Project Structure](#project-structure)
+- [Clinical Disclaimer](#clinical-disclaimer)
 
 ---
 
-## Prerequisites
+## How It Works
 
-| Tool | Version | Purpose |
-|------|---------|---------|
-| Python | 3.10+ | Backend + PyInstaller |
-| Node.js | 18+ | Frontend build |
-| Rust | 1.70+ | Tauri compilation |
-| Tauri CLI | **2.x** | Desktop bundling (v2 required for **Ubuntu 24.04** — v1 needs WebKit/JavaScriptCore **4.0**, which Noble no longer ships) |
-| **Rust (cargo)** | **1.70+** | **Required for `npm run tauri:build`** — if you see `failed to get cargo metadata: No such file or directory`, install Rust and put `cargo` on your `PATH` |
+At runtime, the Tauri desktop shell launches a bundled Python executable (`respisound-api`, built with PyInstaller) as a background process on port **17531**. The Next.js UI is embedded in the app as a static export and loaded by the Tauri webview. The UI talks to `http://127.0.0.1:17531`. When the window closes, Rust kills the background process cleanly.
 
-Install Rust (required before Tauri build):
+Data is stored locally on the device — no internet connection required:
 
+| Platform | Data Location |
+|----------|---------------|
+| Windows  | `%LOCALAPPDATA%\respisound\` |
+| Linux    | `~/.local/share/respisound/` |
+
+This folder contains `respisound.db` (SQLite database) and an `uploads/` subfolder for audio files.
+
+---
+
+## End User Installation
+
+Download the latest installer from the [Releases](../../releases) page. No Python, Node.js, or Rust required.
+
+| Platform | File to download |
+|----------|-----------------|
+| Windows  | `respisound_x64-setup.exe` (recommended) or `respisound_x64.msi` |
+| Ubuntu / Debian | `respisound_amd64.deb` or `respisound_amd64.AppImage` |
+
+**Windows note:** Windows may show a SmartScreen warning on first launch because the installer is not code-signed. Click **"More info" → "Run anyway"** to proceed.
+
+**AppImage note (Linux):** make the file executable before running:
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-# Then reload your shell, or:
-source "$HOME/.cargo/env"
-cargo --version
+chmod +x respisound_*.AppImage
+./respisound_*.AppImage
 ```
 
-On **Linux**, install [Tauri **v2** system dependencies](https://v2.tauri.app/start/prerequisites/#linux). This project uses **Tauri 2** so it builds on **Ubuntu 24.04** (WebKitGTK **4.1** / JavaScriptCore **4.1**). Older **Tauri 1** on Noble often fails with *`javascriptcoregtk-4.0` was not found* because that `.pc` file is not in Ubuntu’s archives anymore.
+---
 
-**Ubuntu 24.04 (Noble)** — WebKit **4.1**:
+## Development Setup — Windows
+
+In development mode the backend and frontend run as separate processes. You do **not** need Rust or Tauri — just Python and Node.js. Open `http://localhost:3000` in your browser.
+
+### 1. Install Git
+
+Download from [git-scm.com](https://git-scm.com/download/win) and install with default options.
+
+### 2. Install Python 3.12
+
+Download the installer from [python.org](https://www.python.org/downloads/).
+
+> During installation, tick **"Add Python to PATH"** on the first screen before clicking Install.
+
+Verify in a new Command Prompt:
+```cmd
+python --version
+pip --version
+```
+
+### 3. Install Node.js 20
+
+Download the LTS installer from [nodejs.org](https://nodejs.org/).
+
+Verify:
+```cmd
+node --version
+npm --version
+```
+
+### 4. Clone the Repository
+
+```cmd
+git clone <repo-url>
+cd respisound-platform
+```
+
+### 5. Install Backend Dependencies (one-time)
+
+PyTorch must be installed separately first using the CPU-only index. Skipping this step and running `pip install -r requirements.txt` directly would download the full CUDA build (~2.5 GB instead of ~500 MB).
+
+```cmd
+cd backend
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements.txt
+```
+
+### 6. Install Frontend Dependencies (one-time)
+
+```cmd
+cd frontend
+npm install
+```
+
+### 7. Run
+
+Open **two separate Command Prompt windows**.
+
+**Terminal 1 — Backend:**
+```cmd
+cd backend
+uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+**Terminal 2 — Frontend:**
+```cmd
+cd frontend
+set NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
+npm run dev
+```
+
+Open `http://localhost:3000` in your browser.
+
+---
+
+## Development Setup — Ubuntu
+
+Tested on Ubuntu 22.04 and 24.04.
+
+### 1. Install Git
 
 ```bash
 sudo apt update
-sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
-  build-essential pkg-config curl wget file libssl-dev libxdo-dev
+sudo apt install git
 ```
 
-**Ubuntu 22.04 (Jammy)** — WebKit **4.0** (use this package name on Jammy):
+### 2. Install Python 3.12
 
+**Ubuntu 24.04 (Noble)** — Python 3.12 is in the default repos:
 ```bash
 sudo apt update
-sudo apt install -y libwebkit2gtk-4.0-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
-  build-essential pkg-config curl wget file libssl-dev libxdo-dev
+sudo apt install python3.12 python3.12-venv python3-pip
 ```
 
-If `sudo apt update` fails because of **broken extra repos** (404 / “Payment Required” / unsigned), fix or remove those entries under `/etc/apt/sources.list.d/`, then run `sudo apt update` again.
+**Ubuntu 22.04 (Jammy)** — add the deadsnakes PPA:
+```bash
+sudo apt update
+sudo apt install software-properties-common
+sudo add-apt-repository ppa:deadsnakes/ppa
+sudo apt update
+sudo apt install python3.12 python3.12-venv python3.12-distutils
+curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
+```
 
-Optional global CLI (the repo also uses the local CLI from `tauri-app/node_modules`):
+Verify:
+```bash
+python3.12 --version
+pip3 --version
+```
+
+### 3. Install Node.js 20
 
 ```bash
-npm install -g @tauri-apps/cli@^2
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install nodejs
 ```
 
-Install Rust: https://rustup.rs
+Verify:
+```bash
+node --version
+npm --version
+```
 
----
+### 4. Clone the Repository
 
-## Development (without Tauri)
+```bash
+git clone <repo-url>
+cd respisound-platform
+```
 
-The fastest way to run the project during development is to start the backend and frontend separately.
+### 5. Install Backend Dependencies (one-time)
+
+```bash
+cd backend
+pip3 install torch --index-url https://download.pytorch.org/whl/cpu
+pip3 install -r requirements.txt
+```
+
+### 6. Install Frontend Dependencies (one-time)
+
+```bash
+cd frontend
+npm install
+```
+
+### 7. Run
+
+The dev script starts both processes at once:
 
 ```bash
 chmod +x scripts/dev.sh
 ./scripts/dev.sh
 ```
 
-This starts the FastAPI server on port 8000 and the Next.js dev server on port 3000. Open `http://localhost:3000` in a browser.
+Or manually in two separate terminals:
 
-On Windows, start both manually in separate terminals:
-
-```powershell
-# Terminal 1
+**Terminal 1 — Backend:**
+```bash
 cd backend
 uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+```
 
-# Terminal 2
+**Terminal 2 — Frontend:**
+```bash
 cd frontend
-set NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
-npm run dev
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000 npm run dev
+```
+
+Open `http://localhost:3000` in your browser.
+
+---
+
+## Building the Desktop App — Windows
+
+This produces a `.exe` installer and `.msi` that end users can install directly.
+
+### 1. Complete the Development Setup
+
+Follow all steps in [Development Setup — Windows](#development-setup--windows) first.
+
+### 2. Install Rust
+
+Download and run `rustup-init.exe` from [rustup.rs](https://rustup.rs/). Accept the default installation options.
+
+Restart your Command Prompt after installation, then verify:
+```cmd
+rustc --version
+cargo --version
+```
+
+> If you use Conda, note that Conda environments do not include Rust. Install via rustup regardless.
+
+### 3. Install WebView2 (if not already present)
+
+WebView2 is pre-installed on Windows 10 (version 1803+) and Windows 11. If it is missing, download the Evergreen Runtime from [Microsoft](https://developer.microsoft.com/en-us/microsoft-edge/webview2/).
+
+### 4. Build the Python Backend
+
+This compiles the FastAPI server into a standalone `.exe` using PyInstaller:
+
+```cmd
+scripts\build_backend.bat
+```
+
+This places the output in `tauri-app\src-tauri\sidecar\respisound-api\`.
+
+### 5. Build the Tauri App
+
+```cmd
+cd tauri-app
+npm install
+npm run tauri:build
+```
+
+The installer is output to:
+```
+tauri-app\src-tauri\target\release\bundle\nsis\respisound_x64-setup.exe
+tauri-app\src-tauri\target\release\bundle\msi\respisound_x64.msi
+```
+
+### Automated Builds via GitHub Actions
+
+Pushing a `v*` tag triggers the CI workflow which builds and publishes a GitHub Release automatically:
+
+```cmd
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
 ---
 
-## Plugging in the trained model
+## Building the Desktop App — Ubuntu
 
-Once training is complete, save the PyTorch checkpoint like this:
+This produces a `.deb` package and `.AppImage`.
 
-```python
-torch.save({
-    "model_state_dict": model.state_dict(),
-    "classes": ["Asthma", "COPD", "Pneumonia", "Bronchitis", "Healthy"]
-}, "backend/model/respisound_model.pt")
+### 1. Complete the Development Setup
+
+Follow all steps in [Development Setup — Ubuntu](#development-setup--ubuntu) first.
+
+### 2. Install Rust
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-If the final architecture differs from the placeholder in `model_definition.py`, update that file to match. The `RespiSoundCRNN` class signature needs to stay consistent — specifically the `num_classes` parameter.
+Accept the default options. Then load Rust into your current shell:
 
-The API detects the model file on startup and exits demo mode automatically. The `/health` endpoint reports `model_loaded: true` once the model is active.
+```bash
+source "$HOME/.cargo/env"
+```
 
----
+Verify:
+```bash
+rustc --version
+cargo --version
+```
 
-## Production build (desktop .exe / .dmg / .AppImage)
+Add this line to your `~/.bashrc` so Rust is available in future terminals:
+```bash
+echo 'source "$HOME/.cargo/env"' >> ~/.bashrc
+```
 
-### Step 1 — Build and stage the Python backend
+### 3. Install Tauri System Libraries
 
-Unix:
+These are the GTK and WebKit libraries Tauri needs to compile and run on Linux.
+
+**Ubuntu 24.04 (Noble):**
+```bash
+sudo apt update
+sudo apt install -y \
+  libwebkit2gtk-4.1-dev \
+  libgtk-3-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev \
+  libssl-dev \
+  libxdo-dev \
+  build-essential \
+  pkg-config \
+  curl \
+  wget \
+  file
+```
+
+**Ubuntu 22.04 (Jammy):**
+```bash
+sudo apt update
+sudo apt install -y \
+  libwebkit2gtk-4.0-dev \
+  libgtk-3-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev \
+  libssl-dev \
+  libxdo-dev \
+  build-essential \
+  pkg-config \
+  curl \
+  wget \
+  file
+```
+
+> The package name changes between Ubuntu versions: `libwebkit2gtk-4.1-dev` on Noble, `libwebkit2gtk-4.0-dev` on Jammy. Using the wrong one will cause a build failure.
+
+### 4. Build the Python Backend
+
 ```bash
 chmod +x scripts/build_backend.sh
 ./scripts/build_backend.sh
 ```
 
-Windows:
-```bat
-scripts\build_backend.bat
-```
+This runs PyInstaller and copies the output to `tauri-app/src-tauri/sidecar/respisound-api/`.
 
-This runs PyInstaller and copies the output into `tauri-app/src-tauri/sidecar/respisound-api/`.
-
-### Step 2 — Build the Tauri desktop app
-
-Ensure `cargo` works in the same terminal (`cargo --version`, or `./scripts/check_rust.sh`). Conda does not include Rust; use `rustup` as above.
+### 5. Build the Tauri App
 
 ```bash
 cd tauri-app
@@ -167,60 +373,126 @@ npm install
 npm run tauri:build
 ```
 
-`beforeBuildCommand` runs `npm run build` here, which installs frontend deps if needed and runs **`next build`** in `../frontend` (static export → `frontend/out`). In `tauri.conf.json`, **`distDir` is relative to `src-tauri/`**, so it must be `../../frontend/out` (not `../frontend/out`), or Tauri will report missing web assets.
+Output is in:
+```
+tauri-app/src-tauri/target/release/bundle/deb/respisound_amd64.deb
+tauri-app/src-tauri/target/release/bundle/appimage/respisound_amd64.AppImage
+```
 
-### What one installer contains
+Install the `.deb`:
+```bash
+sudo dpkg -i tauri-app/src-tauri/target/release/bundle/deb/respisound_amd64.deb
+```
 
-You get **one** desktop artifact (e.g. `.AppImage` or `.deb`) that runs **both**:
+### Automated Builds via GitHub Actions
 
-1. **Frontend** — the Next.js **static export** (`frontend/out`) is **embedded** in the app; the Tauri window is a webview that loads that UI (no separate `npm run dev` for end users).
-2. **Backend** — the PyInstaller **`respisound-api`** binary is bundled under `sidecar/` (see `bundle.resources` in `tauri.conf.json`). Rust **spawns it** on startup and your UI talks to `http://127.0.0.1:<port>`.
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
 
-So the “final file” is not backend-only: it is **Rust shell + baked-in static UI + Python API sidecar**.
-
-Tauri compiles the Rust core, copies those assets, and produces installers under `tauri-app/src-tauri/target/release/bundle/`.
-
-Output files by platform:
-- **Windows** → `respisound_1.0.0_x64.msi` or `respisound_1.0.0_x64-setup.exe`
-- **macOS** → `RespiSound_1.0.0_x64.dmg`
-- **Linux** → `respisound_1.0.0_amd64.AppImage` and `.deb`
+The CI workflow builds both Windows and Linux releases and publishes them to GitHub Releases automatically.
 
 ---
 
-## API reference
+## Plugging In the Trained Model
 
-All endpoints are served at `http://127.0.0.1:<port>`.
+The model file is not included in the repository. Without it, the app runs in Demo Mode (see below).
+
+Save your trained PyTorch checkpoint in the following format:
+
+```python
+torch.save({
+    "model_state_dict": model.state_dict(),
+}, "backend/model/respisound_model.pt")
+```
+
+Place the file at `backend/model/respisound_model.pt`. The API loads it automatically on startup and the `/health` endpoint will return `"model_loaded": true`.
+
+If you rebuild the desktop app after adding the model, PyInstaller will bundle it inside the installer so end users get live inference out of the box.
+
+---
+
+## Demo Mode
+
+When `backend/model/respisound_model.pt` is not found, the app runs in Demo Mode automatically. In this mode:
+
+- All API endpoints work normally
+- The `/screen` endpoint returns plausible random predictions (Dirichlet distribution seeded on the audio filename, so the same file always produces the same result)
+- Patient records, history, and the database all work as normal
+- Results are tagged with a **Demo** badge in the UI
+
+No configuration is needed to enable or disable Demo Mode — it is determined entirely by whether the model file is present at startup.
+
+---
+
+## API Reference
+
+All endpoints are served at `http://127.0.0.1:8000` in development and `http://127.0.0.1:17531` in the packaged desktop app.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/health` | Status and model loaded flag |
-| GET | `/stats` | Aggregate counts and class distribution |
+| GET | `/health` | Server status and `model_loaded` flag |
+| GET | `/stats` | Total screenings, patients, class distribution |
 | POST | `/patients` | Register a new patient |
 | GET | `/patients` | List all patients |
-| GET | `/patients/:id` | Get single patient |
+| GET | `/patients/:id` | Get a single patient |
 | POST | `/screen` | Upload audio and run inference |
 | GET | `/screenings` | List screenings (optional `?patient_id=`) |
-| GET | `/screenings/:id` | Get single screening |
+| GET | `/screenings/:id` | Get a single screening |
+| GET | `/explain/:id` | Mel spectrogram, GradCAM, acoustic features |
 
-The `/screen` endpoint accepts `multipart/form-data` with:
-- `audio` — audio file (WAV recommended, 16kHz mono preferred)
-- `patient_id` — optional UUID from `/patients`
-- `notes` — optional clinical notes string
+The `/screen` endpoint accepts `multipart/form-data`:
 
----
-
-## Demo mode
-
-When no model file is found at `backend/model/respisound_model.pt`, the API runs in demo mode. Probabilities are randomly generated using a Dirichlet distribution seeded on the audio filename. All other functionality — patient records, history, database — works normally. The frontend displays a "Demo mode" badge on any result produced in this state.
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `audio` | file | Yes | Audio file — WAV recommended, 16 kHz mono preferred |
+| `patient_id` | string | No | UUID of a registered patient |
+| `notes` | string | No | Clinical notes to attach to the screening |
 
 ---
 
-## Deployment note
+## Project Structure
 
-The system is designed for fully local, offline operation. All inference, data storage, and the UI are self-contained within the installed application. No data leaves the device. For multi-workstation clinic setups, the backend can run on a shared local network machine — the FastAPI server is not restricted to localhost if the `--host` flag is changed when starting the server.
+```
+respisound-platform/
+├── backend/
+│   ├── main.py               FastAPI app — REST endpoints, inference pipeline, SQLite
+│   ├── model_definition.py   CRNN model architecture
+│   ├── requirements.txt
+│   └── respisound.spec       PyInstaller bundle configuration
+│
+├── frontend/
+│   ├── pages/
+│   │   ├── index.tsx         Dashboard with charts
+│   │   ├── screen.tsx        Audio upload and results
+│   │   ├── patients.tsx      Patient registry
+│   │   └── history.tsx       Screening history
+│   ├── components/
+│   │   └── Layout.tsx        Sidebar navigation
+│   ├── lib/
+│   │   └── api.ts            Typed API client
+│   └── styles/globals.css
+│
+├── tauri-app/
+│   ├── src-tauri/
+│   │   ├── src/main.rs       Spawns backend sidecar, manages lifecycle
+│   │   ├── tauri.conf.json   Window config, CSP, bundle settings
+│   │   └── Cargo.toml
+│   └── package.json
+│
+├── scripts/
+│   ├── dev.sh                Dev launcher (Linux/macOS)
+│   ├── build_backend.sh      PyInstaller build + stage (Linux/macOS)
+│   └── build_backend.bat     PyInstaller build + stage (Windows)
+│
+└── .github/
+    └── workflows/
+        └── build.yml         CI — builds Windows + Linux, publishes on v* tags
+```
 
 ---
 
-## Clinical disclaimer
+## Clinical Disclaimer
 
 RespiSound is a decision support tool. Results must be interpreted by qualified clinical personnel alongside physical examination, patient history, and established diagnostic procedures. It is not a replacement for spirometry, chest X-ray, or physician assessment.
