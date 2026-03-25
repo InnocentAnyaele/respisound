@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/router";
 import Layout from "../components/Layout";
 import { api, Patient, Screening } from "../lib/api";
 
@@ -40,6 +41,7 @@ function Avatar({ name }: { name: string }) {
 }
 
 export default function PatientsPage() {
+  const router = useRouter();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selected, setSelected] = useState<Patient | null>(null);
   const [screenings, setScreenings] = useState<Screening[]>([]);
@@ -209,35 +211,62 @@ export default function PatientsPage() {
                         <div
                           key={s.id}
                           style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            padding: "11px 14px",
+                            padding: "12px 14px",
                             background: "var(--bg)",
                             borderRadius: 9,
                             border: "1px solid var(--border)",
                           }}
                         >
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div
-                              style={{
-                                width: 8,
-                                height: 8,
-                                borderRadius: "50%",
-                                background: CLASS_COLORS[s.predicted_class] || "var(--blue)",
-                                flexShrink: 0,
-                              }}
-                            />
-                            <span className={`badge badge-${s.predicted_class.toLowerCase()}`} style={{ fontSize: 12 }}>
-                              {s.predicted_class}
-                            </span>
-                            <span style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 500 }}>
-                              {(s.confidence * 100).toFixed(0)}%
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <div
+                                style={{
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: "50%",
+                                  background: CLASS_COLORS[s.predicted_class] || "var(--blue)",
+                                  flexShrink: 0,
+                                }}
+                              />
+                              <span className={`badge badge-${s.predicted_class.toLowerCase()}`} style={{ fontSize: 12 }}>
+                                {s.predicted_class}
+                              </span>
+                              <span style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 600 }}>
+                                {(s.confidence * 100).toFixed(0)}% confidence
+                              </span>
+                            </div>
+                            <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                              {formatDate(s.created_at)}
                             </span>
                           </div>
-                          <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-                            {formatDate(s.created_at)}
-                          </span>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
+                            {Object.entries(s.probabilities)
+                              .sort((a, b) => b[1] - a[1])
+                              .slice(0, 3)
+                              .map(([cls, prob]) => (
+                                <div key={cls} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  <span style={{ fontSize: 11, color: cls === s.predicted_class ? "var(--text-primary)" : "var(--text-tertiary)", fontWeight: cls === s.predicted_class ? 600 : 400, width: 72, flexShrink: 0 }}>{cls}</span>
+                                  <div style={{ flex: 1, height: 4, background: "#e5e7eb", borderRadius: 3, overflow: "hidden" }}>
+                                    <div style={{ width: `${prob * 100}%`, height: "100%", background: CLASS_COLORS[cls] || "var(--blue)", borderRadius: 3, opacity: cls === s.predicted_class ? 1 : 0.35 }} />
+                                  </div>
+                                  <span style={{ fontSize: 11, color: "var(--text-tertiary)", width: 36, textAlign: "right", flexShrink: 0 }}>{(prob * 100).toFixed(0)}%</span>
+                                </div>
+                              ))}
+                          </div>
+                          {s.notes && (
+                            <div style={{ fontSize: 11, color: "var(--text-secondary)", background: "#fff", border: "1px solid var(--border)", borderRadius: 6, padding: "5px 9px", marginBottom: 8 }}>
+                              {s.notes}
+                            </div>
+                          )}
+                          <button
+                            onClick={() => router.push(`/screen?id=${s.id}`)}
+                            style={{ width: "100%", padding: "6px 0", borderRadius: 7, border: "1px solid var(--blue)", background: "var(--blue-light)", color: "var(--blue)", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "Inter, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                            </svg>
+                            View Full Analysis
+                          </button>
                         </div>
                       ))}
                     </div>

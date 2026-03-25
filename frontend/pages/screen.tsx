@@ -1120,6 +1120,8 @@ export default function ScreenPage() {
   const [apiReady, setApiReady] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const restoredRef = useRef(false);
+  const [isRestored, setIsRestored] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1130,11 +1132,51 @@ export default function ScreenPage() {
     const checkHealth = () => {
       attempts++;
       api.health()
-        .then(() => { if (!cancelled) setApiReady(true); })
+        .then(() => {
+          if (!cancelled) {
+            setApiReady(true);
+            if (restoredRef.current) return;
+            restoredRef.current = true;
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlId = urlParams.get("id");
+            let targetId: string | null = urlId;
+            if (!targetId) {
+              try {
+                const saved = localStorage.getItem("respisound_last_screening");
+                if (saved) targetId = JSON.parse(saved).screeningId ?? null;
+              } catch { /* ignore */ }
+            }
+            if (!targetId) return;
+            if (!urlId) {
+              try {
+                const saved = JSON.parse(localStorage.getItem("respisound_last_screening") || "{}");
+                if (saved.patientName) setPatientName(saved.patientName);
+                if (saved.patientAge) setPatientAge(saved.patientAge);
+                if (saved.patientGender) setPatientGender(saved.patientGender);
+                if (saved.notes) setNotes(saved.notes);
+              } catch { /* ignore */ }
+            }
+            api.getScreening(targetId)
+              .then((s) => {
+                if (cancelled) return;
+                setResult(s);
+                setIsRestored(true);
+                setExplainLoading(true);
+                api.explainScreening(targetId!)
+                  .then((exp) => { if (!cancelled) setExplain(exp); })
+                  .catch((err: unknown) => {
+                    if (!cancelled) setExplainError(err instanceof Error ? err.message : "Could not load analysis.");
+                  })
+                  .finally(() => { if (!cancelled) setExplainLoading(false); });
+              })
+              .catch(() => {
+                localStorage.removeItem("respisound_last_screening");
+              });
+          }
+        })
         .catch(() => {
           if (cancelled) return;
           if (attempts < MAX_ATTEMPTS) timer = setTimeout(checkHealth, 3000);
-          // else: silently give up — button stays disabled showing "API Starting…"
         });
     };
     checkHealth();
@@ -1205,6 +1247,15 @@ export default function ScreenPage() {
       if (notes.trim()) fd.append("notes", notes.trim());
       const s = await api.screenAudio(fd);
       setResult(s);
+      try {
+        localStorage.setItem("respisound_last_screening", JSON.stringify({
+          screeningId: s.id,
+          patientName: patientName.trim(),
+          patientAge,
+          patientGender,
+          notes: notes.trim(),
+        }));
+      } catch { /* ignore */ }
       setExplainLoading(true);
       setExplainError(null);
       api
@@ -1238,6 +1289,8 @@ export default function ScreenPage() {
     setExplainLoading(false);
     setExplainError(null);
     setIsPlaying(false);
+    setIsRestored(false);
+    localStorage.removeItem("respisound_last_screening");
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
@@ -1248,6 +1301,220 @@ export default function ScreenPage() {
   const sortedProbs = result
     ? Object.entries(result.probabilities).sort((a, b) => b[1] - a[1])
     : [];
+
+  const exportReport = async () => {
+    if (!result) return;
+    const info = CLINICAL_MARKERS[result.predicted_class];
+    const cls = result.predicted_class;
+    const color = CLASS_COLORS[cls] || "#0071e3";
+    const screeningDate = new Date(result.created_at).toLocaleString("en-GB", {
+      day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+    });
+    const generatedAt = new Date().toLocaleString("en-GB", {
+      day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+    });
+
+    const probRows = Object.entries(result.probabilities)
+      .sort((a, b) => b[1] - a[1])
+      .map(([c, p]) => `
+        <tr style="background:${c === cls ? "#f8fafc" : "transparent"}">
+          <td style="padding:7px 12px;font-weight:${c === cls ? 700 : 400};color:${CLASS_COLORS[c] || "#374151"}">${c}${c === cls ? " ★" : ""}</td>
+          <td style="padding:7px 12px;font-weight:${c === cls ? 700 : 400}">${(p * 100).toFixed(1)}%</td>
+          <td style="padding:7px 12px">
+            <div style="height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;width:180px">
+              <div style="height:100%;width:${(p * 100).toFixed(1)}%;background:${CLASS_COLORS[c] || "#0071e3"};border-radius:4px"></div>
+            </div>
+          </td>
+        </tr>
+      `).join("");
+
+    const markersList = info?.markers.map((m) => `<li style="margin-bottom:6px;color:#374151">${m}</li>`).join("") || "";
+    const differentialsList = info?.differentials.map((d) => `<li style="margin-bottom:6px;color:#374151">${d}</li>`).join("") || "";
+    const actionsList = info?.follow_up.map((a) => `<li style="margin-bottom:6px;color:#374151">${a}</li>`).join("") || "";
+
+    const acousticSection = explain ? `
+      <h2>Acoustic Features &amp; Model Uncertainty</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+        <tr><td style="padding:7px 12px;color:#6b7280;width:220px;background:#f9fafb">Spectral Centroid</td><td style="padding:7px 12px;font-weight:600">${(explain.acoustic_features.spectral_centroid_mean / 1000).toFixed(2)} kHz</td></tr>
+        <tr><td style="padding:7px 12px;color:#6b7280">Spectral Bandwidth</td><td style="padding:7px 12px;font-weight:600">${(explain.acoustic_features.spectral_bandwidth_mean / 1000).toFixed(2)} kHz</td></tr>
+        <tr><td style="padding:7px 12px;color:#6b7280;background:#f9fafb">Zero-Crossing Rate</td><td style="padding:7px 12px;font-weight:600">${explain.acoustic_features.zero_crossing_rate_mean.toFixed(4)}</td></tr>
+        <tr><td style="padding:7px 12px;color:#6b7280">Duration</td><td style="padding:7px 12px;font-weight:600">${explain.acoustic_features.duration_s.toFixed(3)} s</td></tr>
+        <tr><td style="padding:7px 12px;color:#6b7280;background:#f9fafb">Sample Rate</td><td style="padding:7px 12px;font-weight:600">${explain.acoustic_features.sample_rate.toLocaleString()} Hz</td></tr>
+        <tr><td style="padding:7px 12px;color:#6b7280">Confidence Tier</td><td style="padding:7px 12px;font-weight:600">${explain.model_uncertainty.confidence_tier}</td></tr>
+        <tr><td style="padding:7px 12px;color:#6b7280;background:#f9fafb">Prediction Entropy</td><td style="padding:7px 12px;font-weight:600">${(explain.model_uncertainty.entropy * 100).toFixed(1)}%</td></tr>
+        <tr><td style="padding:7px 12px;color:#6b7280">Decision Margin (Top-1 vs Top-2)</td><td style="padding:7px 12px;font-weight:600">${(explain.model_uncertainty.margin * 100).toFixed(1)}%</td></tr>
+      </table>
+    ` : "";
+
+    // Fetch images as base64 so they embed correctly in the downloaded HTML
+    const fetchImageAsDataUrl = async (url: string): Promise<string | null> => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const blob = await res.blob();
+        return await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch {
+        return null;
+      }
+    };
+
+    const base = getBase();
+    const [melDataUrl, gradcamDataUrl] = await Promise.all([
+      fetchImageAsDataUrl(`${base}/explain/${result.id}/mel.png`),
+      fetchImageAsDataUrl(`${base}/explain/${result.id}/gradcam.png`),
+    ]);
+
+    const visualSection = (melDataUrl || gradcamDataUrl) ? `
+      <h2>Visual Analysis</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:8px">
+        ${melDataUrl ? `
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;margin-bottom:8px">Mel-Frequency Spectrogram</div>
+          <img src="${melDataUrl}" alt="Mel spectrogram" style="width:100%;border-radius:8px;border:1px solid #e5e7eb" />
+          <div style="font-size:11px;color:#9ca3af;margin-top:5px">Log-power energy across 128 mel-scaled frequency bands</div>
+        </div>` : ""}
+        ${gradcamDataUrl ? `
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;margin-bottom:8px">GradCAM Attention Heatmap</div>
+          <img src="${gradcamDataUrl}" alt="GradCAM heatmap" style="width:100%;border-radius:8px;border:1px solid #e5e7eb" />
+          <div style="font-size:11px;color:#9ca3af;margin-top:5px">Gradient-weighted class activation map — highlights regions driving the prediction</div>
+        </div>` : ""}
+      </div>
+    ` : "";
+
+    const patientSection = (patientName || patientAge || patientGender || notes) ? `
+      <h2>Patient Information</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+        ${patientName ? `<tr><td style="padding:7px 12px;color:#6b7280;width:160px;background:#f9fafb">Patient Name</td><td style="padding:7px 12px;font-weight:600">${patientName}</td></tr>` : ""}
+        ${patientAge ? `<tr><td style="padding:7px 12px;color:#6b7280">Age</td><td style="padding:7px 12px;font-weight:600">${patientAge} years</td></tr>` : ""}
+        ${patientGender ? `<tr><td style="padding:7px 12px;color:#6b7280;background:#f9fafb">Gender</td><td style="padding:7px 12px;font-weight:600">${patientGender}</td></tr>` : ""}
+        ${notes ? `<tr><td style="padding:7px 12px;color:#6b7280;vertical-align:top">Clinical Notes</td><td style="padding:7px 12px">${notes}</td></tr>` : ""}
+      </table>
+    ` : "";
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>RespiSound Report — ${cls} — ${screeningDate}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 0; padding: 48px; max-width: 860px; margin: 0 auto; font-size: 14px; line-height: 1.6; }
+    h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; font-weight: 700; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; margin: 32px 0 16px; }
+    table { border-collapse: collapse; width: 100%; }
+    li { line-height: 1.7; }
+    ul, ol { margin: 0; padding-left: 20px; }
+    .header { border-bottom: 2px solid #111; padding-bottom: 20px; margin-bottom: 28px; display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+    .result-box { background: ${color}0f; border: 1.5px solid ${color}35; border-radius: 10px; padding: 22px 28px; margin: 20px 0 28px; display: flex; align-items: center; gap: 28px; }
+    .urgency { display: inline-block; background: ${info?.urgencyColor || "#6b7280"}15; border: 1px solid ${info?.urgencyColor || "#6b7280"}40; color: ${info?.urgencyColor || "#6b7280"}; padding: 3px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-top: 8px; }
+    .interp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-bottom: 20px; }
+    .disclaimer { margin-top: 40px; padding: 14px 18px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; font-size: 12px; color: #92600a; line-height: 1.65; }
+    .footer { margin-top: 28px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9ca3af; display: flex; justify-content: space-between; }
+    .print-btn { margin-top: 32px; text-align: center; }
+    .print-btn button { background: #0071e3; color: #fff; border: none; padding: 11px 28px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    @media print {
+      body { padding: 20px; }
+      .print-btn { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:5px">RespiSound — Clinical Screening Report</div>
+      <div style="font-size:24px;font-weight:900;color:#111;letter-spacing:-0.03em;line-height:1.1">Respiratory Disease<br>Screening Report</div>
+      <div style="font-size:13px;color:#6b7280;margin-top:8px">Screening date: <strong>${screeningDate}</strong></div>
+    </div>
+    <div style="text-align:right;font-size:12px;color:#6b7280;flex-shrink:0">
+      <div>Generated: ${generatedAt}</div>
+      <div style="margin-top:5px">Record ID:</div>
+      <div style="font-family:monospace;font-size:11px;color:#374151">${result.id}</div>
+      ${result.demo_mode ? '<div style="margin-top:8px;color:#f59e0b;font-weight:700;font-size:12px">⚠ DEMO MODE — No model loaded</div>' : '<div style="margin-top:8px;color:#34c759;font-weight:700;font-size:12px">✓ Live Inference</div>'}
+    </div>
+  </div>
+
+  ${patientSection}
+
+  <h2>Primary Finding</h2>
+  <div class="result-box">
+    <div style="text-align:center;min-width:100px;flex-shrink:0">
+      <div style="font-size:52px;font-weight:900;color:${color};line-height:1">${(result.confidence * 100).toFixed(0)}%</div>
+      <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;margin-top:2px">Confidence</div>
+    </div>
+    <div>
+      <div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Predicted Condition</div>
+      <div style="font-size:36px;font-weight:900;color:${color};line-height:1;margin-bottom:8px">${cls}</div>
+      <div style="font-size:13px;color:#374151;max-width:420px;line-height:1.6">${DISEASE_INFO[cls]?.short || ""}</div>
+      <div class="urgency">${info?.urgency || "Assessment Required"}</div>
+    </div>
+  </div>
+
+  <h2>Class Probabilities</h2>
+  <table style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+    <thead>
+      <tr style="background:#f9fafb">
+        <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280;font-weight:600">Condition</th>
+        <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280;font-weight:600">Probability</th>
+        <th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280;font-weight:600">Distribution</th>
+      </tr>
+    </thead>
+    <tbody>${probRows}</tbody>
+  </table>
+
+  ${info ? `
+  <h2>Clinical Interpretation</h2>
+  <div class="interp-grid">
+    <div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;margin-bottom:10px">Key Acoustic Markers</div>
+      <ul>${markersList}</ul>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;margin-bottom:10px">Differential Diagnoses</div>
+      <ol>${differentialsList}</ol>
+    </div>
+  </div>
+  <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;margin-bottom:10px">Recommended Clinical Actions</div>
+  <ul>${actionsList}</ul>
+  <div style="margin-top:14px;padding:12px 14px;background:#f8fafc;border-radius:7px;border:1px solid #e5e7eb;font-size:13px">
+    <strong>Immediate action:</strong> ${DISEASE_INFO[cls]?.action || ""}
+  </div>
+  ` : ""}
+
+  ${acousticSection}
+
+  ${visualSection}
+
+  <div class="disclaimer">
+    <strong>Clinical Disclaimer:</strong> RespiSound is a decision support tool only. This report must be interpreted by qualified clinical personnel alongside physical examination, patient history, and established diagnostic procedures. It is not a replacement for spirometry, chest X-ray, or physician assessment. Acoustic analysis of a 1.5-second cough sample has inherent limitations and should be considered as supplementary evidence only.
+  </div>
+
+  <div class="footer">
+    <span>RespiSound v1.0 — AI-assisted respiratory screening</span>
+    <span>Record: ${result.id.slice(0, 8)}…</span>
+  </div>
+
+  <div class="print-btn">
+    <button onclick="window.print()">Print / Save as PDF</button>
+  </div>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `RespiSound_${cls}_${result.id.slice(0, 8)}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <Layout>
@@ -1608,6 +1875,29 @@ export default function ScreenPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {result ? (
               <div className="animate-fade-up" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {/* ── Toolbar ── */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  {isRestored ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--text-tertiary)", background: "var(--bg)", border: "1px solid var(--border)", padding: "6px 12px", borderRadius: 8 }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                      </svg>
+                      Restored from last session
+                      <button onClick={() => setIsRestored(false)} style={{ marginLeft: 4, background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", fontSize: 12, padding: 0 }}>✕</button>
+                    </div>
+                  ) : <div />}
+                  <button
+                    onClick={exportReport}
+                    style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", fontFamily: "Inter, sans-serif", boxShadow: "var(--shadow-sm)", transition: "all 0.12s" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--blue)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--blue)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--text-secondary)"; }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    Export Report
+                  </button>
+                </div>
                 {/* Classification card */}
                 <div
                   className="card"
