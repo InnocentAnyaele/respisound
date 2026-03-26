@@ -1,11 +1,90 @@
 # RespiSound — Desktop Clinical Screening Platform
 
-A respiratory disease screening tool that analyses cough audio samples and classifies them into five categories: Asthma, Bronchitis, COPD, Healthy, and Pneumonia. Built as a standalone desktop application for clinical use in low-resource settings where internet access cannot be guaranteed.
+Offline-first desktop software that analyses cough audio and suggests one of five labels — Asthma, Bronchitis, COPD, Healthy, or Pneumonia — for clinical decision support in settings where the network cannot be relied on.
+
+---
+
+## Project overview
+
+Work on RespiSound began with **exploratory data analysis and modelling** on respiratory cough audio. Jupyter notebooks document dataset exploration, classical baselines (including feature engineering and class-imbalance strategies), and convolutional recurrent networks (CRNNs) on spectrograms and raw waveforms. Written **reports** (PDF/DOCX) and figures in `01 EDA & Modelling Notebooks/Reports/` summarize findings and training outcomes.
+
+That research informed the **production stack**: the backend loads a PyTorch CRNN aligned with `backend/model_definition.py`, runs the same preprocessing assumptions as training (16 kHz, fixed-duration windows), and exposes a local REST API. A **Next.js** dashboard provides screening, patient records, and history, embedded in a **Tauri** shell so a single installer bundles the UI and Python sidecar without requiring end users to install Python or Node.
+
+Together, the repo is both a record of the ML lifecycle (EDA → baselines → deep models → evaluation) and the **reference implementation** of the offline desktop product.
+
+---
+
+## Architecture at a glance
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         RESEARCH  &  TRAINING                                ║
+║                                                                              ║
+║   ┌─────────────────────────────────────────────────────────────────────┐   ║
+║   │  01 EDA & Modelling Notebooks/                                       │   ║
+║   │                                                                      │   ║
+║   │   EDA.ipynb ──► Baselines (RF, SMOTE) ──► CRNN (spectrogram/raw)    │   ║
+║   │                                │                                     │   ║
+║   │                                ▼                                     │   ║
+║   │                         Reports/  (PDF, DOCX, training_metrics.png) │   ║
+║   └────────────────────────────────┬────────────────────────────────────┘   ║
+║                                    │  best checkpoint                        ║
+║                                    ▼                                          ║
+║                     backend/model/respisound_model.pt                        ║
+╚════════════════════════════════════╦═════════════════════════════════════════╝
+                                     ║  loaded at startup
+╔════════════════════════════════════╩═════════════════════════════════════════╗
+║                         DESKTOP  APPLICATION  (runtime)                      ║
+║                                                                              ║
+║   ┌──────────────────────────────────────────────────────────────────────┐  ║
+║   │  Tauri shell  (Rust)                                                  │  ║
+║   │                                                                       │  ║
+║   │   ┌─────────────────────┐      localhost      ┌────────────────────┐ │  ║
+║   │   │  Next.js UI          │ ◄──────────────────► │  FastAPI sidecar   │ │  ║
+║   │   │  (static export)     │    :17531 prod      │  (PyInstaller exe) │ │  ║
+║   │   │                      │    :8000  dev        │                    │ │  ║
+║   │   │  Dashboard           │                      │  Inference (CRNN)  │ │  ║
+║   │   │  Screening           │                      │  SQLite DB         │ │  ║
+║   │   │  Patients            │                      │  Audio uploads     │ │  ║
+║   │   │  History             │                      │  GradCAM / explain │ │  ║
+║   │   └─────────────────────┘                      └────────────────────┘ │  ║
+║   │                                                                       │  ║
+║   │   Packaged into a single installer  (.deb / .AppImage / .exe / .msi) │  ║
+║   └──────────────────────────────────────────────────────────────────────┘  ║
+║                                                                              ║
+║   Data stored locally — no internet required                                 ║
+║   Linux: ~/.local/share/respisound/    Windows: %LOCALAPPDATA%\respisound\   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+```
+
+In **packaged** mode Tauri launches the bundled Python sidecar on port **17531** and serves the static UI in a webview. In **development** mode you run Uvicorn on port **8000** and the Next.js dev server on port **3000** separately — no Rust or Tauri needed (see setup guides below).
+
+---
+
+## EDA, modelling, and reports
+
+All of this material lives under **`01 EDA & Modelling Notebooks/`**.
+
+| Asset | Description |
+|--------|-------------|
+| `AISD PROJECT - EDA.ipynb` | Exploratory data analysis on the cough-audio dataset |
+| `baselines-smote-augmentation.ipynb` | Baseline experiments with SMOTE-style augmentation |
+| `random-forest-classifier-1.ipynb` | Random Forest baseline |
+| `random-forest-classifier-featureengineering.ipynb` | RF with engineered audio features |
+| `respisound-crnn.ipynb` | CRNN on mel-spectrogram inputs |
+| `respisound-crnn_spec_augmentation.ipynb` | CRNN with spectrogram augmentation |
+| `respisound-raw-crnn.ipynb` | CRNN on raw waveform input |
+| **`Reports/`** | `AISD PROJECT - EDA.pdf`, EDA and modelling DOCX write-ups, `training_metrics.png`, and other exported artifacts |
+
+These notebooks are **not** required to run the desktop app or the development backend; they are the scientific and engineering trail for how the classifier was developed and evaluated. To wire a trained checkpoint into the app, see [Plugging In the Trained Model](#plugging-in-the-trained-model).
 
 ---
 
 ## Table of Contents
 
+- [Project overview](#project-overview)
+- [Architecture at a glance](#architecture-at-a-glance)
+- [EDA, modelling, and reports](#eda-modelling-and-reports)
 - [How It Works](#how-it-works)
 - [End User Installation](#end-user-installation)
 - [Development Setup — Windows](#development-setup--windows)
@@ -397,7 +476,7 @@ The CI workflow builds both Windows and Linux releases and publishes them to Git
 
 ## Plugging In the Trained Model
 
-The model file is not included in the repository. Without it, the app runs in Demo Mode (see below).
+The default release layout may omit large weight files from Git. Without a checkpoint at `backend/model/respisound_model.pt`, the app runs in Demo Mode (see below). For how weights were produced, see [EDA, modelling, and reports](#eda-modelling-and-reports).
 
 Save your trained PyTorch checkpoint in the following format:
 
@@ -456,11 +535,18 @@ The `/screen` endpoint accepts `multipart/form-data`:
 
 ```
 respisound-platform/
+├── 01 EDA & Modelling Notebooks/   EDA, baselines, CRNN training notebooks
+│   ├── Reports/                   PDF/DOCX reports and training metric figures
+│   └── *.ipynb
+│
 ├── backend/
 │   ├── main.py               FastAPI app — REST endpoints, inference pipeline, SQLite
 │   ├── model_definition.py   CRNN model architecture
+│   ├── model/                Trained weights (e.g. respisound_model.pt) — often git-omitted
 │   ├── requirements.txt
 │   └── respisound.spec       PyInstaller bundle configuration
+│
+├── crnn_best_model/          Optional: saved training checkpoint layout from notebook export
 │
 ├── frontend/
 │   ├── pages/
