@@ -4,6 +4,38 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{Manager, RunEvent};
 
+/// Save an HTML report to the user's Downloads folder (or home dir as fallback).
+/// Returns the full path of the saved file so the frontend can show it.
+#[tauri::command]
+fn save_report(
+    app: tauri::AppHandle,
+    content: String,
+    filename: String,
+) -> Result<String, String> {
+    // Resolve destination directory: Downloads → home dir fallback
+    let base_dir = app
+        .path()
+        .download_dir()
+        .or_else(|_| app.path().home_dir())
+        .map_err(|e| e.to_string())?;
+
+    // Strip any path-separator characters from the filename for safety
+    let safe_name: String = filename
+        .chars()
+        .map(|c| {
+            if matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+
+    let path = base_dir.join(&safe_name);
+    std::fs::write(&path, content.as_bytes()).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
 // Fixed port — baked into the frontend static build (NEXT_PUBLIC_API_URL).
 // Using a fixed port removes the need for dynamic port injection via
 // sessionStorage / window.eval(), which is unreliable in WebView2 on Windows.
@@ -54,6 +86,7 @@ fn main() {
             *app.state::<ApiProcess>().0.lock().unwrap() = Some(child);
             Ok(())
         })
+        .invoke_handler(tauri::generate_handler![save_report])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {

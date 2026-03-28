@@ -1505,15 +1505,39 @@ export default function ScreenPage() {
 </body>
 </html>`;
 
-    const blob = new Blob([html], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `RespiSound_${cls}_${result.id.slice(0, 8)}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const reportFilename = `RespiSound_${cls}_${result.id.slice(0, 8)}.html`;
+
+    // In a packaged Tauri app the WebView does not honour <a download> clicks.
+    // Detect the Tauri runtime and use a native save command instead.
+    type TauriInternals = { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
+    const tauriInternals = (window as unknown as { __TAURI_INTERNALS__?: TauriInternals }).__TAURI_INTERNALS__;
+
+    if (tauriInternals) {
+      try {
+        const savedPath = await tauriInternals.invoke("save_report", {
+          content: html,
+          filename: reportFilename,
+        }) as string;
+        // Brief visual confirmation in the console; a toast can be wired here.
+        console.info(`[RespiSound] Report saved to: ${savedPath}`);
+      } catch (err) {
+        // "cancelled" means the user dismissed the dialog – not a real error.
+        if (err !== "cancelled") {
+          console.error("[RespiSound] Failed to save report:", err);
+        }
+      }
+    } else {
+      // Fallback: standard browser blob-download (works in dev / web builds).
+      const blob = new Blob([html], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = reportFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   };
 
   return (
