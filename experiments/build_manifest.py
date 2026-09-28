@@ -86,7 +86,7 @@ def main() -> None:
             continue
         pid = PID_RE.match(p.stem)
         rows.append(dict(file_id=f"asthma_v2_{folder}_{p.name}", original_filename=p.name,
-                         source_folder=folder, rel_path=str(p.relative_to(root)), path=str(p),
+                         source_folder=folder, rel_path=p.relative_to(root).as_posix(), path=str(p),
                          label=cls, pid=pid.group(1) if pid else None, md5=md5(p), **audio_info(p)))
     if unmapped:
         say(f"WARNING: {len(unmapped)} files are not under a class folder and were skipped, e.g. {unmapped[:3]}")

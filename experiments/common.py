@@ -39,8 +39,14 @@ def load_manifest() -> pd.DataFrame:
 def audio_paths(m: pd.DataFrame, audio_root=None) -> list:
     """Absolute paths from the manifest, or rel_path re-rooted under audio_root when the
     manifest was built on another machine. Never rebuild the manifest just to fix paths:
-    it holds the frozen folds."""
-    return list(m.path) if audio_root is None else [str(Path(audio_root) / r) for r in m.rel_path]
+    it holds the frozen folds.
+
+    rel_path is stored with the separator of the machine that built the manifest, so a
+    Windows-built manifest carries backslashes. On Linux those are ordinary filename
+    characters, not separators, hence the normalisation."""
+    if audio_root is None:
+        return list(m.path)
+    return [str(Path(audio_root) / r.replace("\\", "/")) for r in m.rel_path]
 
 
 def labels(m: pd.DataFrame) -> np.ndarray:
