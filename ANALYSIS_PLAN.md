@@ -1,7 +1,7 @@
 # Pre-registered analysis plan: camera-ready revision
 
 **Paper:** Feature Scaling Beats Architecture Choice in Offline Respiratory Screening for Low-Resource Clinics (GlobalSouthAI @ NeurIPS 2026, submission 207)
-**Status:** FROZEN. Approved by all four authors and committed on `2026-09-28`. Freeze commit hash: recorded in the commit immediately following this one, since a file cannot contain its own commit hash.
+**Status:** FROZEN. Approved by all four authors and committed on `2026-09-28`, freeze commit `69ab10fea7b95dbad42923dc19f9530b4fc3bef5`. That commit, not this line, is the timestamped evidence; this line was added immediately afterwards because a file cannot contain its own commit hash.
 
 **Rule:** This file is committed before any Phase 1 code produces a result. The commit timestamp is our evidence that the plan came first. Any later change goes in the Deviations log (Section 7), dated and with a reason. A change made after seeing results is labelled *post hoc* in the paper.
 
