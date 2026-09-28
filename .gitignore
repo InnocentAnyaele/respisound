@@ -37,3 +37,7 @@ tauri-app/src-tauri/icons/ios/
 .DS_Store
 Thumbs.db
 *.log
+
+# Local copies of the audio corpus
+archive*/
+archive*.zip

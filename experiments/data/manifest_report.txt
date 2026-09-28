@@ -1,0 +1,122 @@
+Scanned C:\Users\kadim\Desktop\Codes\Respisound-Review\respisound\archive (5)\Asthma Detection Dataset Version 2\Asthma Detection Dataset Version 2: 1211 .wav files
+
+Loaded OK: 1211 / 1211
+
+== Class counts (source folder -> label)
+source_folder  label    
+Bronchial      bronchial    104
+asthma         asthma       288
+copd           copd         401
+healthy        healthy      133
+pneumonia      pneumonia    285
+
+== Native sample rate x label  (reviewer 3d5K bandwidth concern)
+label      asthma  bronchial  copd  healthy  pneumonia   All
+native_sr                                                   
+4000          262         15   188        0         39   504
+44100          26         89   213      133        246   707
+All           288        104   401      133        285  1211
+
+== Channels x label
+label       asthma  bronchial  copd  healthy  pneumonia
+n_channels                                             
+1              288        104   401      133        285
+
+== Duration (s) by label
+           count   mean    std    min  25%  50%  75%  max
+label                                                    
+asthma     288.0  5.865  0.661  0.480  6.0  6.0  6.0  6.0
+bronchial  104.0  5.861  0.679  2.000  6.0  6.0  6.0  6.0
+copd       401.0  5.991  0.086  4.944  6.0  6.0  6.0  6.0
+healthy    133.0  5.915  0.249  4.617  6.0  6.0  6.0  6.0
+pneumonia  285.0  5.866  0.380  3.072  6.0  6.0  6.0  6.0
+Clips of exactly 6.0 s: 91.3% (a high share suggests fixed-length segments cut from longer recordings)
+
+== Patient groups (group mode: per_class)
+           groups  clips  clips_per_group
+label                                    
+asthma         58    288             4.97
+bronchial      21    104             4.95
+copd           51    401             7.86
+healthy        25    133             5.32
+pneumonia      46    285             6.20
+Total groups: 201  (the submitted paper claims 112 subjects)
+Files without a P-number: 0
+
+== Do P-numbers restart per class? (helps settle the grouping key)
+P-numbers found in >1 class: 51 of 58
+If most P-numbers appear in several classes, the numbering almost certainly restarts per class, so use --group-mode per_class. Confirm against the dataset documentation.
+
+== Filename suffix codes after '<P#><Class>' (recording site? device? segment?)
+label  asthma  bronchial  copd  healthy  pneumonia
+0                                                 
+?         238          0     0        0          0
+A           0          0     0        0         12
+B           0          0     0        0          7
+C           0          0     0        0          8
+D           0          0     0        0         11
+E           0          0     0        0         12
+F           0          0     0        0          7
+G           0          0     0        0          9
+H           0          0     0        0          9
+I           0          0     0        0         11
+IE         13          0     0        0          0
+IU         13          0     0        0          0
+J           0          0     0        0         17
+K           0          0     0        0         10
+L           0          0     0        0          7
+M           0          0     0        0         12
+Mc          0          0   200        0          0
+N           0          0     0        0         13
+O           0          0     0        0         10
+P           0          0     0        0         13
+Pr          0          0   201        0          0
+Q           0          0     0        0         14
+R           0          0     0        0         10
+RL         12          0     0        0          0
+RS         12          0     0        0          0
+S           0          0     0      133         10
+Sc          0         52     0        0          0
+T           0          0     0        0         15
+Tc          0         52     0        0          0
+U           0          0     0        0         14
+V           0          0     0        0         14
+W           0          0     0        0          8
+X           0          0     0        0         11
+Y           0          0     0        0          7
+Z           0          0     0        0         14
+
+== Exact duplicate files: 12
+                                file_id                                  dup_of     label
+    asthma_v2_healthy_P16Healthy18S.wav     asthma_v2_healthy_P15Healthy61S.wav   healthy
+    asthma_v2_healthy_P16Healthy38S.wav     asthma_v2_healthy_P16Healthy19S.wav   healthy
+    asthma_v2_healthy_P16Healthy41S.wav     asthma_v2_healthy_P16Healthy26S.wav   healthy
+    asthma_v2_healthy_P23Healthy14S.wav     asthma_v2_healthy_P22Healthy88S.wav   healthy
+    asthma_v2_healthy_P23Healthy97S.wav     asthma_v2_healthy_P23Healthy24S.wav   healthy
+    asthma_v2_healthy_P23Healthy98S.wav     asthma_v2_healthy_P23Healthy72S.wav   healthy
+asthma_v2_pneumonia_P44Pneumonia47J.wav asthma_v2_pneumonia_P43Pneumonia73N.wav pneumonia
+asthma_v2_pneumonia_P44Pneumonia49B.wav asthma_v2_pneumonia_P43Pneumonia54I.wav pneumonia
+asthma_v2_pneumonia_P44Pneumonia71M.wav asthma_v2_pneumonia_P43Pneumonia53X.wav pneumonia
+asthma_v2_pneumonia_P48Pneumonia31K.wav asthma_v2_pneumonia_P46Pneumonia80D.wav pneumonia
+asthma_v2_pneumonia_P48Pneumonia61T.wav asthma_v2_pneumonia_P46Pneumonia22V.wav pneumonia
+asthma_v2_pneumonia_P48Pneumonia82Z.wav asthma_v2_pneumonia_P46Pneumonia95A.wav pneumonia
+Duplicates with a DIFFERENT label from their twin: 0
+
+== Cross-check with metadata_handover.csv
+handover rows: 1211  | in both: 1211  | only in original download: 0  | only in handover: 0
+handover 'source' values:
+source
+Asthma_V2_Smartphone    1211
+
+== Fold diagnostics
+grouped r0: test clips/fold 238-251 | min clips of any class in a fold 14 | bronchial groups/fold 3-6 | groups split across folds: 0
+grouped r1: test clips/fold 238-248 | min clips of any class in a fold 14 | bronchial groups/fold 3-6 | groups split across folds: 0
+grouped r2: test clips/fold 237-249 | min clips of any class in a fold 10 | bronchial groups/fold 2-6 | groups split across folds: 0
+grouped r3: test clips/fold 236-249 | min clips of any class in a fold 19 | bronchial groups/fold 4-5 | groups split across folds: 0
+grouped r4: test clips/fold 237-256 | min clips of any class in a fold 18 | bronchial groups/fold 4-5 | groups split across folds: 0
+clip r0: test clips/fold 242-243 | min clips of any class in a fold 20 | bronchial groups/fold 13-16 | groups split across folds: 200
+clip r1: test clips/fold 242-243 | min clips of any class in a fold 20 | bronchial groups/fold 12-15 | groups split across folds: 200
+clip r2: test clips/fold 242-243 | min clips of any class in a fold 20 | bronchial groups/fold 13-16 | groups split across folds: 200
+clip r3: test clips/fold 242-243 | min clips of any class in a fold 20 | bronchial groups/fold 14-16 | groups split across folds: 200
+clip r4: test clips/fold 242-243 | min clips of any class in a fold 20 | bronchial groups/fold 14-17 | groups split across folds: 199
+(For 'grouped', 'groups split across folds' must be 0. For 'clip' it is expected to be large; that is the leakage being measured.)

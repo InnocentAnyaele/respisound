@@ -1,0 +1,8 @@
+# audio never goes in git
+data/raw*/
+*.wav
+# large, regenerable
+cache/
+# smoke-test output
+results/smoke/
+__pycache__/
