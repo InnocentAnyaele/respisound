@@ -19,6 +19,7 @@
 | C3 | clip | 25 | 0.845 ± 0.031 | 0.848 | 0.791 | 0.915 | 0.921 | 0.752 |
 | C4 | clip | 25 | 0.870 ± 0.024 | 0.881 | 0.816 | 0.948 | 0.878 | 0.829 |
 | C5 | clip | 25 | 0.864 ± 0.028 | 0.882 | 0.795 | 0.949 | 0.854 | 0.839 |
+| C6 | clip | 25 | 0.829 ± 0.029 | 0.838 | 0.812 | 0.868 | 0.832 | 0.796 |
 | C8 | clip | 25 | 0.800 ± 0.027 | 0.838 | 0.747 | 0.885 | 0.807 | 0.723 |
 | A1 | grouped | 25 | 0.777 ± 0.039 | 0.859 | 0.690 | 0.864 | 0.768 | 0.703 |
 | A2 | grouped | 25 | 0.766 ± 0.047 | 0.835 | 0.706 | 0.903 | 0.657 | 0.731 |
@@ -26,15 +27,19 @@
 | A4 | grouped | 25 | 0.764 ± 0.049 | 0.829 | 0.682 | 0.901 | 0.685 | 0.723 |
 | A5 | grouped | 25 | 0.774 ± 0.047 | 0.831 | 0.689 | 0.882 | 0.744 | 0.724 |
 | A6 | grouped | 25 | 0.763 ± 0.040 | 0.815 | 0.700 | 0.894 | 0.675 | 0.729 |
+| A7 | grouped | 25 | 0.720 ± 0.058 | 0.852 | 0.699 | 0.717 | 0.635 | 0.697 |
 | B0 | grouped | 25 | 0.382 ± 0.013 | 0.909 | 0.000 | 0.000 | 1.000 | 0.000 |
 | B1 | grouped | 25 | 0.313 ± 0.031 | 0.877 | 0.144 | 0.152 | 0.217 | 0.174 |
 | B2_C2 | grouped | 25 | 0.778 ± 0.032 | 0.861 | 0.709 | 0.861 | 0.760 | 0.698 |
 | B2_C5 | grouped | 25 | 0.765 ± 0.046 | 0.845 | 0.664 | 0.897 | 0.682 | 0.735 |
+| B2_C6 | grouped | 25 | 0.729 ± 0.047 | 0.805 | 0.657 | 0.786 | 0.703 | 0.694 |
 | C1 | grouped | 25 | 0.510 ± 0.053 | 0.720 | 0.485 | 0.597 | 0.214 | 0.535 |
 | C2 | grouped | 25 | 0.779 ± 0.034 | 0.853 | 0.709 | 0.862 | 0.774 | 0.698 |
 | C3 | grouped | 25 | 0.771 ± 0.040 | 0.841 | 0.701 | 0.847 | 0.780 | 0.685 |
 | C4 | grouped | 25 | 0.767 ± 0.048 | 0.847 | 0.692 | 0.893 | 0.673 | 0.728 |
 | C5 | grouped | 25 | 0.766 ± 0.047 | 0.844 | 0.680 | 0.906 | 0.670 | 0.729 |
+| C6 | grouped | 25 | 0.749 ± 0.042 | 0.812 | 0.711 | 0.775 | 0.712 | 0.736 |
+| C7 | grouped | 25 | 0.766 ± 0.045 | 0.841 | 0.675 | 0.828 | 0.765 | 0.722 |
 | C8 | grouped | 25 | 0.742 ± 0.051 | 0.828 | 0.655 | 0.846 | 0.734 | 0.648 |
 
 ## Paired comparisons, grouped protocol (δ = 0.03)
@@ -43,10 +48,10 @@
 |---|---|---|---|---|---|---|
 | R1 | C2 − C1 | scaling on vs off (same 30 features, same folds) | +0.269 | [+0.221, +0.316] | 0.000 | C2 outperforms C1 |
 | R1 | C2 − C3 | 30 vs 26 features (both scaled) | +0.008 | [-0.014, +0.031] | 0.443 | inconclusive |
-| R2 | C2 − C7 | PRIMARY: SVM vs CRNN, both see the full clip | | | | missing results |
-| R2 | C2 − C6 | SVM (full clip) vs CRNN (1.5 s), as in the submitted paper | | | | missing results |
-| R2 | C5 − C7 | RF vs CRNN, both full clip | | | | missing results |
-| R2 | C8 − C6 | SVM vs CRNN, both 1.5 s | | | | missing results |
+| R2 | C2 − C7 | PRIMARY: SVM vs CRNN, both see the full clip | +0.013 | [-0.031, +0.057] | 0.547 | inconclusive |
+| R2 | C2 − C6 | SVM (full clip) vs CRNN (1.5 s), as in the submitted paper | +0.030 | [-0.006, +0.065] | 0.096 | inconclusive |
+| R2 | C5 − C7 | RF vs CRNN, both full clip | -0.000 | [-0.057, +0.057] | 0.995 | inconclusive |
+| R2 | C8 − C6 | SVM vs CRNN, both 1.5 s | -0.007 | [-0.051, +0.037] | 0.736 | inconclusive |
 | R2 | C5 − C2 | RF vs SVM | -0.013 | [-0.042, +0.016] | 0.358 | inconclusive |
 | R5 | A1 − C2 | SVM + SMOTE | -0.002 | [-0.020, +0.015] | 0.802 | comparable |
 | R5 | A3 − C2 | SVM + audio augmentation | -0.001 | [-0.026, +0.024] | 0.926 | comparable |
@@ -54,10 +59,10 @@
 | R5 | A2 − C5 | RF + SMOTE | +0.001 | [-0.024, +0.025] | 0.964 | comparable |
 | R5 | A4 − C5 | RF + audio augmentation | -0.002 | [-0.030, +0.027] | 0.896 | inconclusive |
 | R5 | A6 − C5 | RF + SMOTE + audio augmentation | -0.003 | [-0.033, +0.026] | 0.813 | inconclusive |
-| R5 | A7 − C6 | CRNN + SpecAugment | | | | missing results |
+| R5 | A7 − C6 | CRNN + SpecAugment | -0.029 | [-0.071, +0.013] | 0.168 | inconclusive |
 | B2 | B2_C2 − C2 | SVM with 1.8 kHz low-pass vs without | -0.002 | [-0.015, +0.012] | 0.815 | comparable |
 | B2 | B2_C5 − C5 | RF with low-pass vs without | -0.001 | [-0.022, +0.019] | 0.896 | comparable |
-| B2 | B2_C6 − C6 | CRNN with low-pass vs without | | | | missing results |
+| B2 | B2_C6 − C6 | CRNN with low-pass vs without | -0.020 | [-0.051, +0.011] | 0.193 | inconclusive |
 
 ## R3 leakage gap (clip-level minus grouped, mean macro recall)
 
@@ -78,6 +83,7 @@
 | C3 | 0.845 | 0.771 | 0.075 |
 | C4 | 0.870 | 0.767 | 0.104 |
 | C5 | 0.864 | 0.766 | 0.098 |
+| C6 | 0.829 | 0.749 | 0.080 |
 | C8 | 0.800 | 0.742 | 0.058 |
 
 ## R4 sampling-rate shortcut
@@ -118,6 +124,8 @@ Recall by native sample rate (grouped, pooled out-of-fold). A large gap between 
 | A5 | 44100 | 3535 | 0.699 |
 | A6 | 4000 | 2520 | 0.467 |
 | A6 | 44100 | 3535 | 0.689 |
+| A7 | 4000 | 2520 | 0.485 |
+| A7 | 44100 | 3535 | 0.589 |
 | B0 | 4000 | 2520 | 0.250 |
 | B0 | 44100 | 3535 | 0.200 |
 | B1 | 4000 | 2520 | 0.230 |
@@ -126,6 +134,8 @@ Recall by native sample rate (grouped, pooled out-of-fold). A large gap between 
 | B2_C2 | 44100 | 3535 | 0.688 |
 | B2_C5 | 4000 | 2520 | 0.466 |
 | B2_C5 | 44100 | 3535 | 0.679 |
+| B2_C6 | 4000 | 2520 | 0.525 |
+| B2_C6 | 44100 | 3535 | 0.607 |
 | C1 | 4000 | 2520 | 0.351 |
 | C1 | 44100 | 3535 | 0.429 |
 | C2 | 4000 | 2520 | 0.463 |
@@ -136,6 +146,10 @@ Recall by native sample rate (grouped, pooled out-of-fold). A large gap between 
 | C4 | 44100 | 3535 | 0.689 |
 | C5 | 4000 | 2520 | 0.465 |
 | C5 | 44100 | 3535 | 0.684 |
+| C6 | 4000 | 2520 | 0.536 |
+| C6 | 44100 | 3535 | 0.626 |
+| C7 | 4000 | 2520 | 0.528 |
+| C7 | 44100 | 3535 | 0.656 |
 | C8 | 4000 | 2520 | 0.481 |
 | C8 | 44100 | 3535 | 0.626 |
 

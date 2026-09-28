@@ -1,0 +1,17 @@
+{
+  "tag": "crnn",
+  "utc": "2026-09-28T07:34:25+00:00",
+  "python": "3.12.13",
+  "platform": "Linux-6.12.90+-x86_64-with-glibc2.35",
+  "numpy": "2.0.2",
+  "pandas": "2.3.3",
+  "scipy": "1.16.3",
+  "sklearn": "1.6.1",
+  "imblearn": "0.14.1",
+  "librosa": "0.11.0",
+  "soxr": "1.0.0",
+  "soundfile": "0.13.1",
+  "torch": "2.10.0+cu128",
+  "cuda_device": "Tesla T4",
+  "git_commit": "ad8c7ffdeb14a43c51b7ef4b5af88485c3a2472b"
+}
