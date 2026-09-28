@@ -12,6 +12,7 @@ Usage: python compare.py [--results-dir results/smoke]
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -79,6 +80,11 @@ def verdict(a: str, b: str, lo: float, hi: float) -> str:
 
 
 def main() -> None:
+    # The report uses δ, ±, − and Cramér; a cp1252 console would raise on print.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
     ap = argparse.ArgumentParser()
     ap.add_argument("--results-dir", type=Path, default=C.RESULTS)
     C.RESULTS = ap.parse_args().results_dir
@@ -178,7 +184,8 @@ def main() -> None:
           md_table(by_rate, index=False) if len(by_rate) else "No prediction files."]
     L += ["", "R1 reminder: whatever the size of C2 − C1, describe it as a missing preprocessing step in a "
           "baseline, not as a finding about architectures."]
-    (C.RESULTS / "REPORT.md").write_text("\n".join(L) + "\n")
+    # encoding is explicit: the report contains δ, ±, − and Cramér, which Windows' default cp1252 cannot encode.
+    (C.RESULTS / "REPORT.md").write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))
 
 

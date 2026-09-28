@@ -208,7 +208,7 @@ def main() -> None:
     say("(For 'grouped', 'groups split across folds' must be 0. For 'clip' it is expected to be large;"
         " that is the leakage being measured.)")
 
-    (C.DATA / "manifest_report.txt").write_text(out.getvalue())
+    (C.DATA / "manifest_report.txt").write_text(out.getvalue(), encoding="utf-8")
     print(f"\nWrote {C.MANIFEST} and {C.DATA / 'manifest_report.txt'}")
 
 
