@@ -12,6 +12,7 @@ Usage: python compare.py [--results-dir results/smoke]
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -184,6 +185,39 @@ def main() -> None:
           md_table(by_rate, index=False) if len(by_rate) else "No prediction files."]
     L += ["", "R1 reminder: whatever the size of C2 − C1, describe it as a missing preprocessing step in a "
           "baseline, not as a finding about architectures."]
+
+    # ------------------------------------------------ R6 title (chosen after results; must follow R1-R5)
+    r2 = comp[(comp.rule == "R2") & (comp.A == "C2") & (comp.B == "C7")]
+    r1 = comp[(comp.rule == "R1") & (comp.A == "C2") & (comp.B == "C1")]
+    L += ["", "## R6 title and headline", ""]
+    if len(r1) and r1.iloc[0].get("status") == "ok":
+        L.append(f"R1 (C2 − C1): {r1.iloc[0].verdict}. Describe as a missing preprocessing step, not an architecture finding.")
+    if len(r2) and r2.iloc[0].get("status") == "ok":
+        L.append(f"R2 primary (C2 − C7): {r2.iloc[0].verdict}. The title must not claim that scaling beats architecture, "
+                 "or that either model outperforms the other.")
+    L.append("R4 is triggered (see above), so the abstract must also state that recording-source cues predict class.")
+    L.append("Allowed framing: scaling is a large, decisive preprocessing effect; architecture choice is "
+             "inconclusive on the matched-window comparison; clip-level evaluation inflates recall; "
+             "no tested augmentation has a measurable effect.")
+
+    lat_path = C.RESULTS / "latency_summary.csv"
+    L += ["", "## Latency and footprint (C2, C5, C6; single-clip, CPU)", ""]
+    if lat_path.exists():
+        lat = pd.read_csv(lat_path)
+        L += [md_table(lat, index=False), ""]
+        machine = C.RESULTS / "machine.json"
+        if machine.exists():
+            info = json.loads(machine.read_text(encoding="utf-8"))
+            cpu = info.get("cpu_name") or info.get("processor")
+            L.append(f"Measured on {cpu}, {info.get('ram_gb')} GB RAM, {info.get('platform')}, "
+                     f"cuda={info.get('cuda')}. n = {int(lat.n.iloc[0])} clips after warmup; times in milliseconds.")
+            fp = info.get("footprint", {})
+            L.append(f"Installed package directories: sklearn-only stack {fp.get('sklearn_only_mb')} MB; "
+                     f"same stack plus PyTorch {fp.get('sklearn_plus_torch_mb')} MB "
+                     f"(torch itself {fp.get('torch_mb')} MB).")
+    else:
+        L.append("Not yet measured. Run `python measure_latency.py`.")
+
     # encoding is explicit: the report contains δ, ±, − and Cramér, which Windows' default cp1252 cannot encode.
     (C.RESULTS / "REPORT.md").write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))

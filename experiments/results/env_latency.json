@@ -1,0 +1,17 @@
+{
+  "tag": "latency",
+  "utc": "2026-09-28T08:26:56+00:00",
+  "python": "3.10.0",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "numpy": "2.2.6",
+  "pandas": "2.3.3",
+  "scipy": "1.15.3",
+  "sklearn": "1.7.2",
+  "imblearn": "0.14.2",
+  "librosa": "0.11.0",
+  "soxr": "1.0.0",
+  "soundfile": "0.12.1",
+  "torch": "2.10.0+cpu",
+  "cuda_device": null,
+  "git_commit": "aeadba57b822201c30c2bde0934a43b1c26611d1"
+}

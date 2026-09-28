@@ -154,3 +154,30 @@ Recall by native sample rate (grouped, pooled out-of-fold). A large gap between 
 | C8 | 44100 | 3535 | 0.626 |
 
 R1 reminder: whatever the size of C2 − C1, describe it as a missing preprocessing step in a baseline, not as a finding about architectures.
+
+## R6 title and headline
+
+R1 (C2 − C1): C2 outperforms C1. Describe as a missing preprocessing step, not an architecture finding.
+R2 primary (C2 − C7): inconclusive. The title must not claim that scaling beats architecture, or that either model outperforms the other.
+R4 is triggered (see above), so the abstract must also state that recording-source cues predict class.
+Allowed framing: scaling is a large, decisive preprocessing effect; architecture choice is inconclusive on the matched-window comparison; clip-level evaluation inflates recall; no tested augmentation has a measurable effect.
+
+## Latency and footprint (C2, C5, C6; single-clip, CPU)
+
+| config | stage | n | median_ms | p95_ms |
+|---|---|---|---|---|
+| C2 | load_resample | 200 | 26.640 | 45.200 |
+| C2 | feature | 200 | 31.660 | 62.240 |
+| C2 | model | 200 | 1.680 | 4.100 |
+| C2 | end_to_end | 200 | 60.950 | 102.150 |
+| C5 | load_resample | 200 | 26.640 | 45.200 |
+| C5 | feature | 200 | 31.660 | 62.240 |
+| C5 | model | 200 | 13.650 | 28.830 |
+| C5 | end_to_end | 200 | 73.850 | 126.460 |
+| C6 | load_resample | 200 | 26.640 | 45.200 |
+| C6 | feature | 200 | 13.450 | 28.550 |
+| C6 | model | 200 | 9.770 | 29.420 |
+| C6 | end_to_end | 200 | 51.390 | 92.400 |
+
+Measured on Intel(R) Core(TM) Ultra 7 155H, 33.8 GB RAM, Windows-10-10.0.26200-SP0, cuda=None. n = 200 clips after warmup; times in milliseconds.
+Installed package directories: sklearn-only stack 191.3 MB; same stack plus PyTorch 640.6 MB (torch itself 449.3 MB).

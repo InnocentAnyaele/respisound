@@ -9,6 +9,7 @@ Every number in the revised paper comes from these scripts. They implement `ANAL
 | `run_classical.py` | C1–C5, C8, A1–A6, B0, B1, B2_C2, B2_C5. Scaler, SMOTE and augmentation are fitted inside the training fold. |
 | `run_crnn.py` | C6, C7, A7, B2_C6. Grouped inner validation, train-only class weights, best checkpoint restored. |
 | `compare.py` | Applies the plan's decision rules and writes `results/REPORT.md` with the wording each result is allowed. |
+| `measure_latency.py` | Single-clip CPU timings (median and p95 over 200 clips) and dependency footprint for C2, C5 and C6. |
 | `check_deployed_labels.py` | Checks whether the shipped app's model has Asthma and Bronchial swapped. |
 | `tests/smoke_test.sh` | Runs the full pipeline on synthetic data. |
 
@@ -29,7 +30,8 @@ Every number in the revised paper comes from these scripts. They implement `ANAL
    python run_crnn.py --configs C6 --protocol clip
    ```
 6. **Compare:** `python compare.py`, then read `results/REPORT.md`.
-7. **Commit** `results/runs/`, `results/preds/`, `results/env_*.json` and `results/REPORT.md`. Don't commit `cache/`.
+7. **Latency (CPU-only machine):** `python measure_latency.py [--audio-root ...]`, then re-run `compare.py` so the report includes the table.
+8. **Commit** `results/runs/`, `results/preds/`, `results/env_*.json`, `results/latency_*.csv`, `results/machine.json` and `results/REPORT.md`. Don't commit `cache/`.
 
 ## Running on Kaggle
 

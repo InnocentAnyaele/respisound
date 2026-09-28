@@ -41,6 +41,10 @@ CRAMERS_V_THRESHOLD = 0.30 # R4: native sample rate vs label association that tr
                            # (B0 cannot serve as the trigger: with 2 rates it predicts at most 2 of 5
                            #  classes, so its macro recall is capped at 0.40)
 
+# Latency and footprint (Section 4): single-clip timings on one CPU-only machine
+N_LATENCY_CLIPS = 200
+N_LATENCY_WARMUP = 5
+
 # Models (hyperparameters as actually used in the submitted notebooks)
 SVM = dict(kernel="rbf", C=1.0, gamma="scale", class_weight="balanced", probability=True)
 RF_TREES = 100

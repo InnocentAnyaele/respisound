@@ -1,0 +1,13 @@
+config,stage,n,median_ms,p95_ms
+C2,load_resample,200,26.64,45.2
+C2,feature,200,31.66,62.24
+C2,model,200,1.68,4.1
+C2,end_to_end,200,60.95,102.15
+C5,load_resample,200,26.64,45.2
+C5,feature,200,31.66,62.24
+C5,model,200,13.65,28.83
+C5,end_to_end,200,73.85,126.46
+C6,load_resample,200,26.64,45.2
+C6,feature,200,13.45,28.55
+C6,model,200,9.77,29.42
+C6,end_to_end,200,51.39,92.4

@@ -1,0 +1,28 @@
+{
+  "utc": "2026-09-28T08:26:56+00:00",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "machine": "AMD64",
+  "processor": "Intel64 Family 6 Model 170 Stepping 4, GenuineIntel",
+  "cpu_count_logical": 22,
+  "python": "3.10.0",
+  "cuda": null,
+  "torch": "2.10.0+cpu",
+  "cpu_name": "Intel(R) Core(TM) Ultra 7 155H",
+  "ram_gb": 33.8,
+  "footprint": {
+    "bytes": {
+      "numpy": 29895015,
+      "scipy": 116448344,
+      "sklearn": 38312328,
+      "joblib": 1585185,
+      "librosa": 4598348,
+      "soundfile": 60756,
+      "soxr": 373577,
+      "torch": 449319827
+    },
+    "sklearn_only_mb": 191.3,
+    "torch_mb": 449.3,
+    "sklearn_plus_torch_mb": 640.6,
+    "note": "Sizes are the on-disk package directories of the named modules in this environment, not a freshly pip-installed wheel set. sklearn-only is the classical serving stack; sklearn_plus_torch is that stack plus PyTorch."
+  }
+}
